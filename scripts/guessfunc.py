@@ -63,7 +63,8 @@ def analyze_names(d):
     for i,n in enumerate(d.N2A.keys()):
         progress(float(i) / len(d.N2A))
         a = d.N2A[n]
-        tryMakeSub(d,a)
+        if not GuessString(d, a):
+            tryMakeSub(d,a)
 
 
 #~ def init_funcs(d):
