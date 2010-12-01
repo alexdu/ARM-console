@@ -403,7 +403,7 @@ def func_full(F):
         #~ align = "align='right'" if wid < 600 else ""
         #~ print >> f, "<embed src='%s' %s >" % (svg,align)
         ns['codeflow'] = svg
-        ns['codeflow_width'] = wid
+        ns['codeflow_width'] = "%spt" % wid
     except:
         pass
 
