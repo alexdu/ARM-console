@@ -9,13 +9,13 @@
 *.bin
 *.idc
 *.S
-*/
-!scripts/
-!scripts/html/
-!scripts/html/doc
 *.cache
 *.wiki
+!*.wikipy
 *.txt
 *.svg
 *.kgrind
+*.dis
+*.sig
+*.htm
 arminstrs.py
