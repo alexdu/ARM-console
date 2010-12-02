@@ -513,6 +513,7 @@ def get_func(dump,func):
         raise Exception, "Function not found: %s" % func
     Exception: Function not found: 4278194740
     """
+    if func is None: return
     try: return func.addr
     except: pass
     
