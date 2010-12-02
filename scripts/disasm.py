@@ -520,22 +520,30 @@ def get_func(dump,func):
     funcn = func
     if str(func).startswith("sub_"): func = int(func[4:],16)
     func = dump.N2A.get(func, func)
-    if func not in dump.FUNCS:
-        funcs = []
-        for f in dump.FUNCS:
-            name = funcname(dump,f)
-            funcs.append(name)
-        matches = difflib.get_close_matches(guess_data(dump,funcn), funcs, 1, 0.7)
-        if matches:
-            print "Unknown function: %s. Using closest match: %s." % (guess_data(dump,func), matches[0])
-
-            func = matches[0]
-            func = dump.N2A.get(func, func)
+    
+    try:
+        func = int(func)
+        if func < dump.minaddr or func > dump.maxaddr: 
+            raise Exception, "Function outside dump: %s" % func
+        if func in dump.FUNCS:
             return func
-        raise Exception, "Function not found: %s" % func
+    except:
+        pass
+    funcs = []
 
-    else:
+    for f in dump.FUNCS:
+        name = funcname(dump,f)
+        funcs.append(name)
+    matches = difflib.get_close_matches(guess_data(dump,funcn), funcs, 1, 0.7)
+    if matches:
+        print "Unknown function: %s. Using closest match: %s." % (guess_data(dump,func), matches[0])
+
+        func = matches[0]
+        func = dump.N2A.get(func, func)
         return func
+
+    raise Exception, "Function not found: %s" % func
+
 def get_name(dump,name):
     """
     >>> d = load_dumps()[0]   #doctest: +ELLIPSIS
