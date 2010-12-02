@@ -1221,7 +1221,8 @@ def emusym_code_path(cpf, codetree=False):
         # FA = Pre-incremental store   (=IB)
         # ED = Post-dec                (=DA)
         # EA = Post-inc                (=IA)
-        elif mne == "STM" and msf in ["FD", "FA", "ED", "EA", "DB", "IB", "DA", "IA"]:
+        # default: EA=IA? http://www.keil.com/support/man/docs/armasm/armasm_cjagjjbc.htm
+        elif mne == "STM" and msf in ["FD", "FA", "ED", "EA", "DB", "IB", "DA", "IA", None]:
             sign = "-" if msf in ["FD", "ED", "DB", "DA"] else "+"
             pre = 1 if msf in ["FD", "FA", "DB", "IB"] else 0
             rev = (msf in ["FD", "ED", "DB", "DA"])
