@@ -464,11 +464,14 @@ class CALL(Function):
     def __str__(self):
         calladdr, funcaddr = self.args[0], self.args[1]
 
-        try: funcaddr = int(funcaddr)
+        funcname = None
+        sig = funargs.FSig(None, None, None, None, ret=None)
+        try: 
+            funcaddr = int(funcaddr)
+            funcname = GetFunctionName(funcaddr)
+            sig = funargs.getFuncSignature(funcaddr)
         except: pass
 
-        funcname = GetFunctionName(funcaddr)
-        sig = funargs.getFuncSignature(funcaddr)
         if funcname is None:
             funcname = GetName(funcaddr)
         if funcname is None:

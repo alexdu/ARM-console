@@ -107,6 +107,7 @@ def refsig(F):
     return R
     
 def calls_html(dump, F):
+    print "calls..."
     C = []
     for a in range(F.addr, F.end, 4):
         try: 
@@ -123,10 +124,12 @@ def calls_html(dump, F):
             except: fun = None
             c['func'] = link2func(fun) if fun else funname
             c['args'] = args
+            print funname + args
             C.append(c)
     return C
 
 def callers_html(dump,value=None, func=None, context=0, f=sys.stdout):
+    print "callers..."
     C = []
     refs = find_refs(dump, value, func)
     for a,v in sorted(refs):
@@ -392,9 +395,11 @@ def func_full(F):
 
     try:
         #~ es.resetLog()
+        print "code paths..."
         CP = es.find_code_paths(F.addr, timeout=10)
 
         try:
+            print "decompiling..."
             ns['decompiled'] = str(deco.decompile(F.addr, CP))
         except:
             ns['decompiled'] = "whoops..."
@@ -453,7 +458,7 @@ def func_update(F,quick=True):
 
 def full(D):
     if type(D) != list: D = [D]
-    quick(D)
+    #~ quick(D)
     for dump in D:
         print "=" * (len(dump.bin) + 33)
         print "Running symbolic analysis for %s..." % dump.bin

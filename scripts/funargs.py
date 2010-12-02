@@ -217,7 +217,7 @@ def getFuncSignature(ea):
     defa = FSig(None, None, None, None, ret=None)
     if ea < idapy._d.minaddr or ea > idapy._d.maxaddr:
         return defa
-    try: args = cache.access((idapy._d, ea), lambda x: guessargs(ea))
+    try: args = cache.access((idapy._d.bin, ea), lambda x: guessargs(ea))
     except:
         print "could not guess args for", hex(ea)
         return defa

@@ -97,7 +97,7 @@ def decompile(ea, CP=None):
     #~ print "finding code paths..."
     if CP is None: CP = emusym.find_code_paths(ea)
     CP = sorted(CP, key=lambda x: -len(x))
-    #~ print "found %d code paths" % len(CP)
+    print "found %d code paths" % len(CP)
 
     emusym.resetArm(func=True)
     has_loops = False
@@ -114,11 +114,12 @@ def decompile(ea, CP=None):
         
     CT = []
     for i,cpf in enumerate(CP):
-        #~ print "emulating code path %d of %d" % (i+1, len(CP))
+        print "emulating code path %d of %d" % (i+1, len(CP))
 
         emusym.resetArm(func=True)
         CT.append(emusym.emusym_code_path(cpf, codetree=True))
 
+        print CT[-1]
     #~ print "first"
     #~ print(CT[0])
     #~ print "second"
@@ -126,7 +127,7 @@ def decompile(ea, CP=None):
     #~ print len(CT)
 
 
-    #~ print "\nmerging"
+    print "\nmerging"
     mt = CT[0]
     for ct in CT[1:]:
         mt = merge_trees(mt, ct)
@@ -134,7 +135,7 @@ def decompile(ea, CP=None):
 
     #~ return mt
 
-    #~ print "rebuilding"
+    print "rebuilding"
     T = []
     for flags in [(False,False), (True,False), (True,True)]:
         emusym.setSimpFlags(*flags)
