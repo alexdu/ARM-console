@@ -119,7 +119,7 @@ def decompile(ea, CP=None):
         emusym.resetArm(func=True)
         CT.append(emusym.emusym_code_path(cpf, codetree=True))
 
-        print CT[-1]
+        #~ print CT[-1]
     #~ print "first"
     #~ print(CT[0])
     #~ print "second"
