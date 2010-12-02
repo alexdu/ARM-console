@@ -61,6 +61,9 @@ def link2func(fun):
     """
     return '<a href="%s">%s</a>' % (funcfile(fun), fun.name)
 
+def xlink2func(fun):
+    return '<a xlink:href="%s" style="fill: blue" xlink:show="new" target="_top">%s</a>' % (funcfile(fun), fun.name)
+
 def link2funcoff(dump, addr):
     """
     >>> link2funcoff(D[0], 0X8017F8)
@@ -394,7 +397,14 @@ def func_full(F):
         sv = open(svgf)
         svgdata = sv.read()
         sv.close()
-        svgdata = re.sub("@([a-zA-Z0-9_]+)", '<a xlink:href="\\1.htm" style="fill: blue" xlink:show="new" target="_top">\\1</a>', svgdata)
+        #svgdata = re.sub("@([a-zA-Z0-9_]+)", '<a xlink:href="\\1.htm" style="fill: blue" xlink:show="new" target="_top">\\1</a>', svgdata)
+        for m in re.findall("@([a-zA-Z0-9_]+)", svgdata):
+            try:
+                fun = dump.Fun(m)
+            except:
+                continue
+            
+            svgdata = svgdata.replace("@" + str(fun.name), xlink2func(fun))
         wid = int(re.search('<svg width="([0-9]+)pt"', svgdata).groups()[0])
         sv = open(svgf,"w")
         sv.write(svgdata)
@@ -405,7 +415,7 @@ def func_full(F):
         ns['codeflow'] = svg
         ns['codeflow_width'] = "%spt" % wid
     except:
-        pass
+        raise
 
     ns['lines'] = disasm_html(dump, F.addr, F.end)
     ns['calls'] = calls_html(dump, F)
