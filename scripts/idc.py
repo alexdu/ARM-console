@@ -31,6 +31,7 @@ def parse(idc):
         if m:
             addr = int(m.groups()[0], 16)
             name = m.groups()[1]
+            if name.startswith("$"): continue
             addr2name[addr] = name
             name2addr[name] = addr
 
