@@ -517,6 +517,7 @@ def get_func(dump,func):
     except: pass
     
     funcn = func
+    if str(func).startswith("sub_"): func = int(func[4:],16)
     func = dump.N2A.get(func, func)
     if func not in dump.FUNCS:
         funcs = []
