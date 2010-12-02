@@ -398,12 +398,15 @@ def func_full(F):
         print "code paths..."
         CP = es.find_code_paths(F.addr, timeout=10)
 
-        try:
-            print "decompiling..."
-            ns['decompiled'] = str(deco.decompile(F.addr, CP))
-        except:
-            ns['decompiled'] = "whoops..."
-
+        if len(CP) < 50:
+            try:
+                print "decompiling..."
+                ns['decompiled'] = str(deco.decompile(F.addr, CP))
+            except:
+                ns['decompiled'] = "whoops..."
+        else:
+            ns['decompiled'] = "too many code paths (%d, limit=50)" % len(CP)
+            
         svg = change_ext(funcfile(F), ".svg")
         svgf = os.path.join(change_ext(dump.bin,""), svg)
         es.create_graph(CP, svgf)
@@ -458,7 +461,7 @@ def func_update(F,quick=True):
 
 def full(D):
     if type(D) != list: D = [D]
-    #~ quick(D)
+    quick(D)
     for dump in D:
         print "=" * (len(dump.bin) + 33)
         print "Running symbolic analysis for %s..." % dump.bin
