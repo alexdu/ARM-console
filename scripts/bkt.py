@@ -48,7 +48,7 @@ def back_solve(ea, unknowns):
                 #~ print cp
                 sol = try_solve(cp,regs)
                 if sol: return sol
-                #~ else: lucky = False
+                else: lucky = False
         except IndexError:
             print "WARNING: no code refs to %X" % cp[0]
             break

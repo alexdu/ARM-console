@@ -16,6 +16,8 @@ import shutil
 import cgi
 import cPickle
 from profilestats import profile
+import traceback
+import idapy
 
 def Template(*args,**kwargs):
     here = os.getcwd()
@@ -113,10 +115,10 @@ def calls_html(dump, F):
                 assert isFuncStart(calledfun)    # if assert OK => recursive call, else, just a jump inside the function
         except: continue
         if calledfun:
-            try: call = bkt.find_func_call(a, len(es.getFuncSignature(calledfun).args))
+            try: call = bkt.find_func_call(a, len(funargs.getFuncSignature(calledfun).args))
             except: continue
             c = {'address': link2funcoff(dump, a)}
-            funaddr, funname, args = bkt.find_func_call(a, len(es.getFuncSignature(calledfun).args))
+            funaddr, funname, args = bkt.find_func_call(a, len(funargs.getFuncSignature(calledfun).args))
             try: fun = dump.Fun(funaddr)
             except: fun = None
             c['func'] = link2func(fun) if fun else funname
@@ -132,6 +134,7 @@ def callers_html(dump,value=None, func=None, context=0, f=sys.stdout):
         #~ print >> f, "%s:" % link2funcoff(dump,a),
         try: 
             calledfun = bkt.func_call_addr(a)
+            print calledfun
             assert calledfun == value
         except:
             #~ disasm_html(dump, a-4*context, a+4*context+4, f)
@@ -142,7 +145,7 @@ def callers_html(dump,value=None, func=None, context=0, f=sys.stdout):
         try:
             #~ print a, calledfun, value
             c = {'address': link2funcoff(dump, a)}
-            funaddr, funname, args = bkt.find_func_call(a, len(es.getFuncSignature(calledfun).args))
+            funaddr, funname, args = bkt.find_func_call(a, len(funargs.getFuncSignature(calledfun).args))
             try: fun = dump.Fun(funaddr)
             except: fun = None
             c['func'] = funname
@@ -420,7 +423,8 @@ def func_full(F):
         ns['codeflow'] = svg
         ns['codeflow_width'] = "%spt" % wid
     except:
-        raise
+        traceback.print_exc()
+        pass
 
     ns['lines'] = disasm_html(dump, F.addr, F.end)
     ns['calls'] = calls_html(dump, F)

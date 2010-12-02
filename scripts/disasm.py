@@ -203,8 +203,10 @@ class Fun():
     ASM function: main_prog at 0xff000000 in test-0xff000000.bin
     """
     def __init__(self, dump, addr_or_name):
+        addr = get_func(dump, addr_or_name)
+        if not addr: raise "Invalid function: " + str(addr_or_name)
         self.dump = dump
-        self.addr = get_func(dump, addr_or_name)
+        self.addr = addr
 
     def __str__(self):
         return "ASM function: %s at 0x%x in %s" % (self.name, self.addr, self.dump.bin)
@@ -490,6 +492,20 @@ def dataname(dump, addr):
     else:
         return "0x%X" % (addr)
 
+def get_func_approx(dump,func):
+    funcs = []
+    for f in dump.FUNCS:
+        name = funcname(dump,f)
+        funcs.append(name)
+    matches = difflib.get_close_matches(guess_data(dump,func), funcs, 1, 0.7)
+    if matches:
+        print "Unknown function: %s. Using closest match: %s." % (func, matches[0])
+
+        func = matches[0]
+        func = dump.N2A.get(func, func)
+        return func
+
+    raise Exception, "Function not found: %s" % func
 
 def get_func(dump,func):
     """
@@ -510,8 +526,8 @@ def get_func(dump,func):
       File "<doctest __main__.get_func[4]>", line 1, in <module>
         get_func(d, 0xff001234)
       File "disasm.py", line 322, in get_func
-        raise Exception, "Function not found: %s" % func
-    Exception: Function not found: 4278194740
+        raise Exception, "Function outside dump: %s" % func
+    Exception: Function outside dump: 4278194740
     """
     if func is None: return
     try: return func.addr
@@ -521,28 +537,17 @@ def get_func(dump,func):
     if str(func).startswith("sub_"): func = int(func[4:],16)
     func = dump.N2A.get(func, func)
     
-    try:
-        func = int(func)
-        if func < dump.minaddr or func > dump.maxaddr: 
-            raise Exception, "Function outside dump: %s" % func
-        if func in dump.FUNCS:
-            return func
-    except:
-        pass
-    funcs = []
+    try: func = int(func)
+    except: return get_func_approx(dump,funcn)
 
-    for f in dump.FUNCS:
-        name = funcname(dump,f)
-        funcs.append(name)
-    matches = difflib.get_close_matches(guess_data(dump,funcn), funcs, 1, 0.7)
-    if matches:
-        print "Unknown function: %s. Using closest match: %s." % (guess_data(dump,func), matches[0])
-
-        func = matches[0]
-        func = dump.N2A.get(func, func)
+    if func in dump.FUNCS:
         return func
 
-    raise Exception, "Function not found: %s" % func
+    if func < dump.minaddr or func > dump.maxaddr: 
+        raise Exception, "Function outside dump: %s" % func
+
+    raise Exception, "There's no function starting at %s" % func
+
 
 def get_name(dump,name):
     """
@@ -632,6 +637,10 @@ def load_dumps(regex=""):
         D[b].REFLIST = list(refs.iteritems())
         D[b].A2REFS, D[b].REF2AS = cache.access(b, lambda b: index_refs(refs, D[b].ROM))
     cache.save()
+    
+    if len(D) == 1:
+        print "Auto-selecting dump %s" % D[bins[0]].bin
+        idapy.select_dump(D[bins[0]])
     return sorted(D.values(), key=lambda x: x.bin)
 
 def guess_data(dump,value,allow_pointer=True):

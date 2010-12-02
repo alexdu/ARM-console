@@ -17,6 +17,8 @@ import sympy
 from sympy import *
 from sympy.core.cache import * 
 import re
+import funargs
+from funargs import void, ptr
 #from pprint >> log, import pprint
 
 
@@ -72,7 +74,7 @@ def GuessFunction(start):
 
 
 def IsReturn(ea):
-    dis = GetDisasm(ea).upper()
+    dis = GetDisasmQ(ea).upper()
     if dis.startswith("LDM") and "PC" in GetOpnd(ea,1):
         print >> log, "return (LDM changes PC)"
         return True
@@ -152,9 +154,9 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100):
     #~ ea = E[i0]
     while True:
     #for ie in range(i0, len(E)):   # first instruction is either a branch or the first instruction
-        print >> log, "%X"%ea, GetDisasm(ea) 
+        print >> log, "%X"%ea, GetDisasmQ(ea) 
         #time.sleep(0.1)
-        #~ print "%X"%ea, GetDisasm(ea)
+        #~ print "%X"%ea, GetDisasmQ(ea)
             
         m = GetMnem(ea)
         suffix = GetCondSuffix(ea)
@@ -172,7 +174,7 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100):
                 print >> log, "new addr: 0x%x" % newAddr
                 #~ print "new addr: 0x%x" % newAddr
                 if isFuncStart(newAddr) or maybeFuncStart(newAddr):
-                    #~ print "Tail call: ", GetDisasm(ea)
+                    #~ print "Tail call: ", GetDisasmQ(ea)
                     break
                 else:
                     if newAddr in cp_only(cpf):
@@ -446,41 +448,7 @@ abortfuncs = ["assert_0", "assert"]
 def isAbortFunc(ea):
     return GetFunctionName(ea) in abortfuncs
 
-void = "void"
-ptr = "ptr"
 
-class FSig:
-    def __init__(self, *args, **kwargs):
-        self.args = []
-        self.ret = None
-        for a in args:
-            if type(a)==tuple:
-                self.args.append(a)
-            else:
-                self.args.append((None,a))
-        self.__dict__.update(kwargs)
-    def arg(i):
-        return self.args[i]
-
-    numargs = property(lambda self: len(self.args))
-
-FS = {}
-FS["DebugMsg"] = FSig(int, int, ('msg',str), None, None, None, None, None, None, ret=void)
-FS["prop_request_change"] = FSig(('property',hex), ('address',ptr), ('len',int), ret=void)
-FS["prop_register_slave"] = FSig(('property_list',ptr), ('count',int), ('prop_handler',ptr), ('priv',ptr), ('token_handler',ptr), ret=void)
-FS["FIO_CreateFile"] = FSig(('name',str), ret=int)
-FS["FIO_WriteFile"] = FSig(('handle',int), ('start_addr',ptr), ('length',int), ret=int)
-FS["FIO_CloseFile"] = FSig(('handle',int), ret=int)
-FS["call"] = FSig(('name',str), None, None, None, None, None, None, ret=void)
-FS["LoadCalendarFromRTC"] = FSig(ptr, ret=void)
-FS["AllocateMemory"] = FSig(int, ret=ptr)
-
-
-def getFuncSignature(ea):
-    fn = GetName(ea)
-    if fn in FS:
-        return FS[fn]
-    return FSig(None, None, None, None, ret=None) # default signature
 
 def RetName(funcaddr, calladdr, funcname=None):
     if funcname is None:
@@ -500,7 +468,7 @@ class CALL(Function):
         except: pass
 
         funcname = GetFunctionName(funcaddr)
-        sig = getFuncSignature(funcaddr)
+        sig = funargs.getFuncSignature(funcaddr)
         if funcname is None:
             funcname = GetName(funcaddr)
         if funcname is None:
@@ -722,7 +690,7 @@ def print_cp(cp):
     print >> log, "" 
     print >> log, "CODE PATH:"
     for ea in cp:
-        print >> log, "R0M:%X"%ea, GetDisasm(ea)
+        print >> log, "R0M:%X"%ea, GetDisasmQ(ea)
 
 
 
@@ -894,6 +862,8 @@ class LSL(Function):
 class LSR(Function): pass
 class ASR(Function): pass
 class BIC(Function): pass
+class ROR(Function): pass
+class ROL(Function): pass
 
 # BYTE(BYTE(x)) = BYTE(x)
 # BYTE(HALFWORD(x)) = BYTE(x)
@@ -947,6 +917,8 @@ lsl = infix(lambda x,y: LSL(x,y))
 lsr = infix(lambda x,y: LSR(x,y))
 asl = infix(lambda x,y: LSL(x,y)) # ASL is the same as LSL
 asr = infix(lambda x,y: ASR(x,y))
+ror = infix(lambda x,y: ROR(x,y))
+rol = infix(lambda x,y: ROL(x,y))
 andop = infix(lambda x,y: AND(x,y))
 orop = infix(lambda x,y: OR(x,y))
 xor = infix(lambda x,y: XOR(x,y))
@@ -974,6 +946,10 @@ def TranslatePhrase(s):
             enew.append("*asl* " + ea[4:])
         elif ea.startswith("ASR#"):
             enew.append("*asr* " + ea[4:])
+        elif ea.startswith("ROR#"):
+            enew.append("*ror* " + ea[4:])
+        elif ea.startswith("ROL#"):
+            enew.append("*rol* " + ea[4:])
 
         elif ea.startswith("LSL "): 
             enew.append("*lsl* " + TranslatePhrase(ea[4:]))
@@ -983,8 +959,12 @@ def TranslatePhrase(s):
             enew.append("*asl* " + TranslatePhrase(ea[4:]))
         elif ea.startswith("ASR "):
             enew.append("*asr* " + TranslatePhrase(ea[4:]))
+        elif ea.startswith("ROR "):
+            enew.append("*ror* " + TranslatePhrase(ea[4:]))
+        elif ea.startswith("ROL "):
+            enew.append("*rol* " + TranslatePhrase(ea[4:]))
         else:
-            raise "unhandled phrase: " + s
+            raise Exception, "unhandled phrase: " + s
     #~ print >> log, enew
     return str(string.join(enew))
     
@@ -1046,7 +1026,7 @@ def TranslateOperand(ea,i,lhs=False,dest=False):
         return TranslatePhrase(GetOpnd(ea,i)), None
     elif t == None:
         return None, None
-    raise Exception, "operand %d not handled: %s (type=%d)" % (i,GetDisasm(ea), t)
+    raise Exception, "operand %d not handled: %s (type=%d)" % (i,GetDisasmQ(ea), t)
 
 def getRegsS(op):
     R = []
@@ -1117,12 +1097,12 @@ def emusym_code_path(cpf, codetree=False):
     cp,cf = split_code_path_ea_cond(cpf)
     print >> log, ""
     print >> log, "*******************************************"
-    print >> log, "emulating from 0x%X: %s" % (cp[0], GetDisasm(cp[0]))
+    print >> log, "emulating from 0x%X: %s" % (cp[0], GetDisasmQ(cp[0]))
     print >> log, "*******************************************"
 
     print >> clog, ""
     print >> clog, "*******************************************"
-    print >> clog, "emulating from 0x%X: %s" % (cp[0], GetDisasm(cp[0]))
+    print >> clog, "emulating from 0x%X: %s" % (cp[0], GetDisasmQ(cp[0]))
     print >> clog, "*******************************************"
     unhandled = 0
     #~ print cpf
@@ -1135,7 +1115,7 @@ def emusym_code_path(cpf, codetree=False):
         else:                    # plain, simple code path (only addresses)
             ea = elem
             
-        print >> log, GetDisasm(ea)
+        print >> log, GetDisasmQ(ea)
         
         ARM.PC = ea+8
 
@@ -1279,17 +1259,17 @@ def emusym_code_path(cpf, codetree=False):
 
 
         elif mne == "MCR":
-            print >> log, "write to coprocessor:", GetDisasm(ea)
-            for r in getRegsS(GetDisasm(ea).split(";")[0]):
+            print >> log, "write to coprocessor:", GetDisasmQ(ea)
+            for r in getRegsS(GetDisasmQ(ea).split(";")[0]):
                 print >> log, "  * ARM.%s = %s" % (r, eval("ARM.%s" % r))
         elif mne == "MRC":
-            print >> log, "read from coprocessor:", GetDisasm(ea)
-            for r in getRegsS(GetDisasm(ea).split(";")[0]):
+            print >> log, "read from coprocessor:", GetDisasmQ(ea)
+            for r in getRegsS(GetDisasmQ(ea).split(";")[0]):
                 run("ARM.%s = Symbol('cop_%X')" % (r, ea))
 
         elif mne == "B":
             if lr_stored:
-                print "CALL?!?!", GetDisasm(ea)
+                print "CALL?!?!", GetDisasmQ(ea)
             if ea != cp[-1]:
                 print >> log, "  => ignoring (was handled by code path extractor)"
             else:
@@ -1307,7 +1287,9 @@ def emusym_code_path(cpf, codetree=False):
                     #~ print copy(ARM.SP) in ARM.MEMDIC, ARM.MEMDIC.get(ARM.SP)
                     #~ print str(CALL(ea, func, *args))
                     try: AddInstr(Symbol(str(CALL(ea, func, *args))))
-                    except: AddInstr(Symbol("Buggy_CALL"))
+                    except: 
+                        AddInstr(Symbol("Buggy_CALL"))
+                        raise
                 run("ARM.R0 = Symbol('%s')" % RetName(func, ea))
                 if isAbortFunc(func): break
     
@@ -1337,7 +1319,9 @@ def emusym_code_path(cpf, codetree=False):
                 #~ print copy(ARM.SP) in ARM.MEMDIC, ARM.MEMDIC.get(ARM.SP)
                 #~ print str(CALL(ea, func, *args))
                 try: AddInstr(Symbol(str(CALL(ea, func, *args))))
-                except: AddInstr(Symbol("Buggy_CALL"))
+                except: 
+                    AddInstr(Symbol("Buggy_CALL"))
+                    raise
             run("ARM.R0 = Symbol('%s')" % RetName(func, ea))
             if isAbortFunc(func): break
 
@@ -1347,7 +1331,9 @@ def emusym_code_path(cpf, codetree=False):
             if codetree: 
                 if codetree: 
                     try: AddInstr(CALL(ea, func, ARM.R0, ARM.R1, ARM.R2, ARM.R3, MEM(ARM.SP), MEM(ARM.SP+4), MEM(ARM.SP+8), MEM(ARM.SP+12)))
-                    except: AddInstr(Symbol("Buggy_CALL"))
+                    except: 
+                        AddInstr(Symbol("Buggy_CALL"))
+                        raise
 
             run("ARM.R0 = Symbol('ret_%s_%s')" % (func, "%X"%ea))
             if isAbortFunc(func): break
@@ -1365,7 +1351,9 @@ def emusym_code_path(cpf, codetree=False):
                     #~ print copy(ARM.SP) in ARM.MEMDIC, ARM.MEMDIC.get(ARM.SP)
                     #~ print str(CALL(ea, func, *args))
                     try: AddInstr(Symbol(str(CALL(ea, func, *args))))
-                    except: AddInstr(Symbol("Buggy_CALL"))
+                    except: 
+                        AddInstr(Symbol("Buggy_CALL"))
+                        raise
                 run("ARM.R0 = Symbol('%s')" % RetName(func, ea))
                 if isAbortFunc(func): break
 
@@ -1374,8 +1362,8 @@ def emusym_code_path(cpf, codetree=False):
                 if codetree: AddInstr(JUMP(eval(dest)))
 
         else:
-            print >> log, "unhandled:", GetDisasm(ea)
-            for r in getRegsS(GetDisasm(ea).split(";")[0]):
+            print >> log, "unhandled:", GetDisasmQ(ea)
+            for r in getRegsS(GetDisasmQ(ea).split(";")[0]):
                 run("ARM." + r + " = Symbol('unhandled." + r + "')")
             unhandled += 1
             if codetree: AddInstr(Symbol("Unhandled_" + GetMnem(ea)))

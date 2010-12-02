@@ -26,6 +26,10 @@ def select_dump(dump):
     global _d
     _d = dump
 
+def GetDisasmQ(ea):
+    """faster GetDisasm"""
+    return string.join(_d.DISASM.get(ea).split("\t")[2:], "   ")
+
 def GetDisasm(ea):
     """
     >>> print GetDisasm(0xff000000) #doctest: +NORMALIZE_WHITESPACE
@@ -149,7 +153,7 @@ def GetOperandValue(ea,i):
     if opnd == "SP":
         return 13
     if opnd.startswith("[R"):
-        return int(opnd[2:].split(",")[0])
+        return int(opnd[2:].replace("]",",]").split(",")[0])
     if opnd.startswith("[PC"):
         return 15
     if opnd.startswith("["):
@@ -255,7 +259,7 @@ _rcond = re.compile("(AL|NV|EQ|NE|VS|VC|MI|PL|CS|CC|HI|LS|GE|LT|GT|LE)")
 def GetModeSuffix(ea):
     mne = GetMnem(ea)
     mnef = GetMnef(ea)
-    if mne is None: return
+    if mnef is None or mne is None: return
     if mnef.startswith(mne):
         s = re.search(_rmode, mnef[len(mne):])
         if s:
@@ -266,6 +270,7 @@ def GetModeSuffix(ea):
 def GetCondSuffix(ea):
     mne = GetMnem(ea)
     mnef = GetMnef(ea)
+    if mnef is None or mne is None: return
     if mnef.startswith(mne):
         s = re.search(_rcond, mnef[len(mne):])
         if s:
@@ -277,6 +282,7 @@ def GetCondSuffix(ea):
 def GetExtraSuffixes(ea):
     asm = GetMnef(ea)
     mne = GetMnem(ea)
+    if asm is None or mne is None: return
     if asm.startswith(mne):
         s = re.sub(_rmode, "", asm[len(mne):])
         s = re.sub(_rcond, "", s)
@@ -287,6 +293,7 @@ def GetExtraSuffixes(ea):
 def GetFlagSuffix(ea):
     asm = GetMnef(ea)
     mne = GetMnem(ea)
+    if asm is None or mne is None: return
     if asm.startswith(mne):
         s = re.sub(_rmode, "", asm[len(mne):])
         s = re.sub(_rcond, "", s)
@@ -298,6 +305,7 @@ def GetFlagSuffix(ea):
 def GetByteSuffix(ea):
     asm = GetMnef(ea)
     mne = GetMnem(ea)
+    if asm is None or mne is None: return
     if asm.startswith(mne):
         s = re.sub(_rmode, "", asm[len(mne):])
         s = re.sub(_rcond, "", s)
@@ -309,6 +317,7 @@ def GetByteSuffix(ea):
 def GetHalfwordSuffix(ea):
     asm = GetMnef(ea)
     mne = GetMnem(ea)
+    if asm is None or mne is None: return
     if asm.startswith(mne):
         s = re.sub(_rmode, "", asm[len(mne):])
         s = re.sub(_rcond, "", s)

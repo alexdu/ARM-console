@@ -73,7 +73,7 @@ def analyze_names(d):
         #~ print sub
         #~ tryMakeSub(d,sub)
         
-#@profile
+#~ @profile
 def run(d):
     select_dump(d)
     analyze_names(d)
