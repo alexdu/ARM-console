@@ -1,0 +1,305 @@
+'''API reference for [[GPL_Tools/ARM_console|ARM firmware analysis console]]'''
+
+Examples are given for the disassembly of [http://groups.google.com/group/ml-devel/msg/1c690d8dee580ee3 autoexec.bin] (550D, 1.0.8) and for the 550D dump, which can be obtained by running Magic Lantern on your camera.
+
+===Loading some dumps and some names===
+    D = load_dumps("(autoexec|108)")
+    t2i,ml = D  # D is sorted by bin file name
+    ml.load_names("stubs-550d.108.S")
+    ml.load_names("autoexec.S")
+
+===Magic commands===
+Shortcuts to misc stuff.
+
+They operate on the currently selected dump, so first you have to select one:
+    sel ml
+
+Go to address or name:
+
+    g 8B194
+    g fprintf
+
+Search for strings:
+    s magic
+
+Search for references:
+    r additional_version
+    r 0x1ED0
+
+===Classes/objects===
+====Dump====
+Contains all info about a dump.
+
+    ml.bin
+    hex(ml.loadaddr), hex(ml.minaddr), hex(ml.maxaddr)
+    t2i.funcs(r"Flavor[C|S]")             # when ratio=1, it uses a regex search
+    t2i.funcs("DebugMsg", 0.5)            # when ratio < 1, this is the min. allowed ratio for fuzzy search
+   ["...",45,46,47,"..."]t2i.refs("sounddev")
+   ["...",92,93,94,95,96,97,98,"..."]t2i.refs("sounddev", context=2)
+    t2i.strings("AudioLevel")
+    
+    t2i.strrefs("^CreateTask$")
+    
+    t2i.disasm(0xff010000, 0xff01000f)
+
+    ml.MakeName(0x8D070, "config_parse_file")
+   #cache.clear() 
+    ml.MakeFunction(0x8D070)                             # will guess the end address
+    ml.MakeFunction(0x8D070, 0x8D0DC)                   # explicit end address
+    ml.MakeFunction(0x8D070, 0x8D0DC, "config_parse_file")    # explicit end address and name
+    ml.MakeFunction(0x8D070, name="config_parse_file")           # will guess the end address and set the given name
+
+====Fun====
+ASM function.
+Constructor:
+*'''dump.Fun(name_or_addr)'''
+
+    t2i.Fun(0xFF1C924C)
+    f = t2i.Fun("setFiltreOff")
+    f
+    f.name
+    "%x"%f.addr
+    "%x"%f.end
+    f.size
+    f.called_by()
+    f.calls()
+    f.disasm()
+    f.sig
+   [0,1,2,3,"..."]f.refs()
+    f.strings()
+
+===Modules===
+====[[GPL Tools/match.py|match]]====
+
+Matches functions and addresses between different versions of firmware, or different camera models.
+
+See [[GPL Tools/match.py]].
+
+====guessfunc====
+This guesses function locations from calls (BL, BX), PUSH instructions, and loaded names which are not marked as functions. Function size is guessed with emusym.GuessFunction.
+
+This is the main function. I prefer to run this before generating the HTML output.
+   [0,1,"..."]guessfunc.run(ml)
+
+Those are little workers:
+   ~analyze_names(dump)
+   ~analyze_push(dump)
+   ~analyze_bl(dump)
+   ~analyze_bx(dump)
+
+====html====
+
+Exports the disassembly to a (huge) set of HTML files, which can be browsed offline (like [http://a1ex.bitbucket.org/disasm-quick/index.htm this example]). 
+
+It can also do some automated firmware analysis.
+
+   [1,"...",-2]html.quick(ml)      # quick disassembly of dump ''ml''
+
+   [1,"...",7,"...",-3]html.full(ml)        # quick(...) + symbolic function analysis
+
+   ~html.quick(D)        # process all dumps from list D
+   ~html.full(D)
+
+   ~html.update(ml)      # only re-generate modified pages (experimental).
+
+Some small workers:
+    html.link2addr(0x8B194)
+    html.link2func(ml.Fun("fprintf"))
+    html.link2funcoff(0x8eee0)
+
+====disasm====
+
+Disassembly and code browsing.
+
+    hex(BYTE(ml, 0x916b8))
+    hex(UINT32(ml, 0x916b8))
+    GuessString(ml, 0x916b8)
+
+    funcname(ml, 0x8eec0)
+    funcname(ml, 0x8b000)
+    dataname(ml, 0x1ED0)
+
+    guess_data(ml,0x8c228)          
+    guess_data(ml,0x8e748)
+    guess_data(ml,0x8dca8)
+
+====fileutil====
+Utils for working with files.
+
+    change_ext("foo.py", ".jpg")
+ '''s = capture(func, *args, **kwargs)''' # capture output and result of func
+
+====stats====
+
+Sorts functions by number of calls to them:
+   ["...",-3,-2,-1]stats.calls_to(t2i)
+
+Or by how many other functions they call:
+   ["...",-3,-2,-1]stats.calls_from(t2i)
+
+The most called functions seem to be DebugMsg and assert.
+
+====idapy====
+
+IDAPython compatibility layer. Also contains functions from [[IDAPython/utils.py]] and other small stuff. 
+
+They are NOT fully compatible with IDAPython! I only wrote it to help porting my existing scripts.
+
+The first thing you have to do before using any of those functions is:
+   ~select_dump(dump)
+where ''dump'' is a Dump object; for example:
+    select_dump(t2i)
+Or use the magic command ''sel'', which does the same thing.
+
+    GetFirstWord("abc def")
+    getRegs03("R1, R2 and maybe R5")
+    getRegsS("R1, R2 and maybe R5")
+    filter_non_printable("\x07buzz!")
+    print GetDisasm(0xff064bbc)
+    GetMnem(0xff064bbc)
+    GetMnef(0xff064bbc)
+    GetOpnd(0xff064bbc, 0)
+    GetOpnd(0xff064bbc, 1)
+    GetOpnd(0xff064bbc, 2)
+    GetOpType(0xff064bbc, 0)
+    GetOpType(0xff064bbc, 1)
+    GetOpType(0xff064bbc, 2)
+    GetOperandValue(0xff064bbc, 0)
+    GetOperandValue(0xff064bbc, 1)
+    GetOperandValue(0xff064bbc, 2)
+
+    print GetDisasm(0xff48e5a4)
+    GetModeSuffix(0xff48e5a4)
+    GetCondSuffix(0xff48e5a4)
+    OppositeSuffix("EQ")
+
+    print GetDisasm(0xff064b90)
+    GetExtraSuffixes(0xff064b90)
+    GetByteSuffix(0xff064b90)
+    GetHalfwordSuffix(0xff064b90)
+    GetFlagSuffix(0xff064b90)
+
+    print GetDisasm(0xff064bb4)
+    ChangesFlags(0xff064bb4)
+
+    GetString(0xff011e1c)
+
+    isFuncStart(0xff064e98)
+    GetFunctionName(0xff064e98)
+    GetFuncOffset(0xff064e98)
+    FuncItems(0xff064e98)
+
+    SegStart(0xff064e98)
+    SegEnd(0xff064e98)
+
+    CodeRefsTo(0xff064e98)
+   [1,2,"..."]DataRefsTo(1ED0)
+    CodeRefsFrom(0xff064e98)
+    DataRefsFrom(0xff064e98)
+
+
+====bunch====
+Something like a struct.
+    b = Bunch(foo=5, baz="hello")
+    b.foo
+    b.baz
+
+====emusym====
+
+Symbolic emulation of ASM code, based on SymPy. Theory is here: [[IDAPython/Static_analysis]]
+
+These functions operate on the currently selected dump, therefore you have to select one first.
+    sel ml
+    CP = emusym.find_code_paths(0x8dac8)        # extract code path by doing a recursive branch analysis 
+    emusym.create_graph(CP, "myfunc.svg")       # generate a graph of code flow, with graphviz
+[[File:Myfunc.svg|thumb|center]]
+    cp = CP[0]                                  # select first code path
+    emusym.resetArm()                           # reset the symbolic ARM registers and memory contents
+    emusym.emusym_code_path(cp)                 # run one code paths under symbolic emulation
+   [0]emusym.emusym_code_path(cp, codetree=True)  # return a code tree, useful for decompiling
+    emusym.split_code_path_ea_cond(cp)          # split the code path in two plain lists
+
+    emusym.GuessFunction(0x8ea48)            # guesses the end of the function, when you know the start
+
+====bkt====
+
+Backtracing: solves the contents of ARM registers / memory addresses by symbolic emulation of ASM code, going backwards until all requested unknowns are found. Theory is here: [[IDAPython/Backtracing]].
+    
+    ea = 0x8CE98
+    g ea-28
+    bkt.back_solve(ea, ['ARM.R0','ARM.R1'])            # a faster heuristic
+    bkt.back_solve_slow(ea, ['ARM.R0','ARM.R1'])       # slow, dumb, but reliable
+    bkt.go_back([ea])
+    bkt.go_back([ea-4,ea])
+    bkt.find_func_call(ea, 4)
+   [0,1,2,3,"..."]bkt.trace_calls_to("DebugMsg", 4)
+
+These functions find the function which is called at a given address, using backtracing if needed.
+    bkt.subaddr_bl(0x8CD74)
+    bkt.subaddr_bx(0x8CE98)
+   ~bkt.subaddr_mov(addr)          # for MOV PC, ...
+
+====deco====
+Experimental decompiler based on SymPy (see module emusym). Only works for functions without loops.
+    print deco.decompile(0x8D070)
+
+====cache====
+Stores the result of lengthy computations.
+   ~cache.access("my_computation", func_which_takes_ages_to_run)
+   ~cache.disable()
+   ~cache.enable()
+   ~cache.clear()
+
+There is also some experimental support for persistent cache, but it's disabled by default.
+
+====progress====
+
+Simple progress indicator; also computes ETA.
+
+    progress("Doing some useless stuff...")
+    
+   %time.sleep(1)
+   
+    progress(0.25)
+    
+   %time.sleep(2)
+   
+    progress(0.75)
+
+====doc====
+Make Wiki docs from IPython commands included in main text.
+Something like auto-generating docs from docstrings.
+
+You write:
+
+ This is an example:
+     2+2
+
+and you get:
+
+ This is an example:
+  <nowiki>In [1]: '''2+2'''</nowiki>
+  Out[1]: 4
+
+All the code to be executed in IPython is prefixed by:
+* four spaces: normal code, i.e. show input command, run it and show output.
+* three spaces and %: show input command, run it, but do not show output.
+* three spaces and ~: show input command, but do not run it.
+* three spaces and #: run the command, but do not show anything.
+* three spaces and [list of indices]: display only those lines of output; use a string instead of index to display anything you like.
+e.g.:
+     [1,2,"...",-1]ml.strings
+displays the first line, second line, ellipsis and then the last line. 
+Also, in this mode, max line length is limited to 100.
+
+Spacing is critical, so pay attention! Also, 4 spaces and % is a magic command.
+
+To make a doc:
+ doc.run("scripts/doc/api-ref.wikipy")
+
+Result is in ''scripts/doc/api-ref.wiki'', with Wiki markup codes.
+
+----
+Enjoy!
+
+--~~~~

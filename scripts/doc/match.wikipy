@@ -1,0 +1,161 @@
+This is the script for matching functions and data addresses between a bunch of IDC databases.
+
+Alternative tools which do (more or less) the same job:
+* [[Gensig_finsig|Gensig/Finsig from CHDK]]
+* [http://code.google.com/p/patchdiff2/ patchdiff2]
+* [http://corelabs.coresecurity.com/index.php?module=Wiki&action=view&type=tool&name=turbodiff turbodiff]
+
+==Theory==
+Also check [[IDAPython/Firmware matching]]
+
+===Function signature===
+It's the sequence of mnemonics of each instruction, also with flags. To see it, you may use a Fun object:
+
+   #D = load_dumps("(108|109|204)")
+   #t108, t109, mk2 = D
+   #t2i = t108
+    f = Fun(t2i,"setFiltreOff")
+    f.sig
+
+Exact matches are easiest to find, since they can be indexed. If the function start and end addresses are known, that helps a lot. If not, the Aho-Corasick algorithm is *extremely* fast, but my code is a bit buggy.
+
+===Evaluating matches===
+Each match found is evaluated with a score. The bigger the score, the better the match. Ideally, matches with positive score should be OK, and matches with negative score should be bad.
+
+====Function pairs with identical signature====
+
+Scoring for those functions is computed in ''data_match_funcpair''. Each line has one or two data references (first is a number, and then, if that number is a ROM address, the second data ref is the contents of that address).
+
+We can divide references into '''small numbers''' (let's say < 0x1000), which are offsets, small constants and other uninteresting stuff, and '''large numbers''', which can yield data matches. If the reference is actually a string, we'll consider it a separate case. Now let's compute:
+
+<math>smallmatch = \dfrac{smallmatch_{OK}}{smallmatch_{total}}</math>
+
+<math>bigmatch = \dfrac{bigmatch_{OK}}{bigmatch_{total}}</math>
+
+<math>stringmatch = \dfrac{stringmatch_{OK}}{stringmatch_{total}}</math>
+
+A string match is much more important than a simple number match, so let's weight them like this:
+
+<math>score_m = (smallmatch - 0.5) \sqrt{smallmatch_{total}} + (bigmatch - 0.5) \sqrt{smallmatch_{total}} + 20 \cdot (stringmatch - 0.5) \sqrt{stringmatch_{total}}</math>
+
+If the strings are almost identical, their match ratio would be also added to <math>stringmatch_{OK}</math>.
+
+Further hints may be given by how many times the function is called, and how many function it calls. These numbers don't have to match exactly, so instead let's compute a mismatch:
+<math>\mathrm{mismatch}(a,b) = \dfrac{|a-b|}{(a+b)/2}</math>
+
+With this, the score of a function pair becomes:
+
+<math> score = score_m - 2 \cdot \mathrm{mismatch}(refsto_1, refsto_2)  - 2 \cdot \mathrm{mismatch}(refsfrom_1, refsfrom_2) </math>
+
+Does it work? We'll see. Is there a better formula? Sure, it just waits for you to find it :)
+
+====Function pairs with different signature====
+
+That's more difficult.
+
+====Data address pairs====
+
+These pairs are obtaining by comparing two functions with identical signature, and matching their referenced addresses line by line.
+
+For those addresses, we have these sources of information:
+* the quality of the pair(s) from which a given data pair was obtained
+* analyzing how is the address referenced throughout the firmware
+
+Since the score of a function pair is additive, we can try to add the scores of all the pairs which yielded this match. If a data match was detected from two matching function pairs, or more, that's much better than being detected from only one function pair. Also, if the data pair was detected from 10 functions or more, it's almost certain it's a good match.
+
+So let's try this formula:
+
+<math>score_{datapair} = AVG(funcpairs) \cdot \sqrt{COUNT(funcpairs)-0.95}</math>
+
+
+==Usage==
+This script is included in [[GPL Tools/ARM console]].
+
+As a tutorial, let's try to generate a stub for 550D 1.0.9. Let's say we already have the stubs and firmware dumps for 5d2 2.0.4 and 550d 1.0.8. No IDC files are needed (only the stubs).
+
+   ~D = load_dumps("(108|109|204)")
+   ~t108, t109, mk2 = D
+
+   [0,1,2,'...',-3,-2,-1]M = match.CodeMatch(D)
+
+   [0,1,2,'...',-3,-2,-1]DM, SRC = match.DataMatch(M)
+
+   [8,9,"...",-1]match.MakeStubs(t109, D, M, DM, SRC)
+
+The generated stub is displayed at the terminal (just copy/paste it to its final destination). 
+You'll also want to check the logs: there's a big, colorful one called ''MakeStubs-diff.htm'', which shows side-by-side diffs for matched functions. There are a few other text logs; see the reference section for details.
+
+==API reference==
+
+===CodeMatch*===
+These functions implement some code (i.e. function) matching algorithms.
+
+The first one search for matches only in the functions marked in the database (usually loaded from IDC). It's fast, but it relies on functions being correctly identified for all the firmware dumps, so it may miss many functions.
+   ~M = match.CodeMatch_dbfuncs(D)
+
+This one performs full-text signature search using an Aho-Corasick tree. It needs the functions to be correctly defined only in the source firmwares.
+
+My interpretation of aho-corasick search results is very slow (I'm counting spaces in the signature to find the function offsets) and will be optimized.
+
+   ~M = match.CodeMatch_corasick(D)
+
+Not implemented yet: a frontend to gensig/finsig. Useful for comparison and for creating side-by-side diffs for gensig/finsig matches.
+   ~M = match.CodeMatch_finsig(D)
+
+The last one calls all the above algorithms and combines the results (it hopefully extracts the best from all algorithms):
+   ~M = match.CodeMatch(D)
+
+All those functions return a dictionary which looks like this:
+    M.keys()
+    len(M[t108,mk2])
+    pair = M[t108,mk2][5]
+    funcpair((t108,mk2), pair)
+    Score((t108,mk2), pair)
+
+These functions create some logs: code-matches-*.txt and raw-match-log-*.txt.
+
+===DataMatch===
+Two matched function which identical code structure can yield matches for data addresses (like sounddev, additional_version etc.). They can also suggest matches for functions which are not identical, but they are called from the same place.
+
+This is the low-level function, which analyze only a pair of functions (and also provides a score):
+   ["...",-4,-3,-2,-1]data_match_funcpair((t108,mk2), pair)
+
+And this analyzes all the matches:
+   ~DM, SRC = match.DataMatch(D)
+
+Outputs: a dictionary of data matches (DM) and a dictionary of sources (SRC, i.e. matched functions from which the match was deducted).
+This function also creates data-matches.txt and possible-code-matches.txt (one for data addresses and other for functions).
+
+===Scoring===
+   ~Score(dumpair, addrpair)
+   ~Score_refmatch(dumpair, addrpair, srcscores)
+
+    combined_score([1,2,10,20])
+    combined_score([5])
+    combined_score([5,5])
+
+===MakeStubs===
+
+This is used for creating stubs for a new firmware version. See the Usage section.
+
+===SyncIDC===
+Not implemented yet. It will write some IDCs for name syncing purposes.
+
+==Logs==
+====MakeStubs-diff.htm====
+It is created by ''match.MakeStubs'' and contains the following:
+* for each function pair: a side-by-side diff
+* for each data pair: side-by-side diffs of the functions from which that data pair was found.
+====raw-match-log-*.txt====
+It shows detailed info about the matching process, for each pair of functions.
+====code-matches-*.txt====
+This contains the matched function addresses for all the firmware pairs, sorted by score.
+====data-matches.txt====
+This contains the matched data addresses (i.e. not functions) for all the firmware pairs.
+====possible-code-matches.txt====
+This contains matched functions found with the data matching method. They are not verified (yet) and may contain many bad matches.
+
+
+Happy Matching!
+
+--~~~~

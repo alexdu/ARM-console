@@ -1,0 +1,281 @@
+'''ARM firmware analysis console'''
+
+This will contain all my firmware analysis scripts which are now floating around.
+
+==Download==
+
+Git repo [https://github.com/alexdu/ARM-console]:
+ git clone git://github.com/alexdu/ARM-console.git
+
+Zip: 
+ wget http://github.com/alexdu/ARM-console/zipball/master
+
+==Preparing to run==
+===Requirements===
+* [http://www.python.org/ Python] (I use 2.6 under Linux, but it should run under any major operating system)
+* some Python libraries:
+ sudo apt-get install python python-scipy ipython graphviz
+ sudo easy_install pydot easygui sympy cheetah ahocorasick profilestats
+* arm-elf-gcc in your PATH (see [[Build instructions/550D]] for how to do that)
+* at least 4 GB of RAM (or skills to optimize the script).
+
+(This is the reason my scripts run 10-100 times faster than in IDAPython: because I've cached lots of stuff in Python dictionaries.)
+
+===Input and source files===
+Prepare a working directory where you will put the input files. You will need:
+* Some dumps, with the .bin extension. Include the load address in the dump name.
+* Some databases, in IDC or Stubs (*.S) format. Try to give them names similar to the dumps, to help the autodetection.
+* Unzip the scripts in the same folder
+
+Example of contents of the working folder:
+ ''scripts <dir>''
+ main.py
+ README.md
+ 
+ autoexec.0x8A000.bin                       [http://groups.google.com/group/ml-devel/msg/1c690d8dee580ee3]
+ 5d2.204.0xff810000.bin
+ 550d.108.0xff010000.bin
+ 550d.109.0xff010000.bin
+ 
+ 5d2.204.AJ.idc
+ 550d.108.20101116_indy_ROM0.idc
+ 
+ autoexec.S
+ stubs-5d2.204.S                            [http://bitbucket.org/hudson/magic-lantern/src/tip/stubs-5d2.204.S]
+ stubs-550d.108.S                           [http://bitbucket.org/hudson/magic-lantern/src/tip/stubs-550d.108.S]
+
+==Running in interactive mode==
+
+Start the program with:
+ python main.py
+
+and you should get this prompt:
+
+ ARM firmware analysis console ready.
+ In [1]: 
+
+This is the IPython prompt; here you can browse the dumps, find/verify matches between firmware versions, and lots of other cool stuff. 
+
+If you are new to IPython, be sure to skim this tutorial: 
+
+http://ipython.scipy.org/doc/nightly/html/interactive/tutorial.html
+
+===Hex numbers===
+
+Python uses decimal format by default. If you know how to change it to hex for integers, please leave a message. Until then, you'll have to use these:
+
+    hex(100)
+    hex(-1)
+    int("babe", 16)
+
+===Loading the dumps===
+
+You can select the dumps to load with a regex:
+   [1,2,3,4,5,6,7,"..."]D = load_dumps("(108|204|autoexec)")
+    D
+
+You will want to assign a short name for each dump. Hint: they are sorted after the bin's file name.
+    t2i, mk2, ml = D
+
+The script will auto-detect IDC files with similar filenames, and load some info from them.
+
+You'll have to load stubs (*.S) files manually:
+    ml.load_names("stubs-550d.108.S")
+    ml.load_names("autoexec.S")
+
+===Automatic function guess===
+
+This will try to find function calls and identify functions inside the firmware. Experimental, but should be harmless. I prefer to run it before generating the HTML.
+   ~guessfunc.run(ml)
+
+===Browsing the firmware: HTML===
+Run this to create a browseable HTML like [http://a1ex.bitbucket.org/disasm-quick/index.htm this example]:
+   ~html.quick(ml)
+   ~html.quick(t2i)
+and when it's ready, open index.html in a webkit-based browser (firefox is too slow, sorry!)
+
+If you want a more thorough analysis of the firmware, like [http://a1ex.bitbucket.org/disasm/index.htm this one], run:
+   ~html.full(ml)
+
+A full analysis of ML firmware takes 1-2 minutes. The same analyses for the 550D firmware takes around 1 day, or less if you help me optimize the algorithms :)
+
+If you can leave the computer on for a week, just run this to analyze all your dumps:
+   ~html.full(D)
+
+#Parallel processing? No, but you can start the program as many times as you wish. You will need LOTS of RAM, though.
+
+'''!!! THE HTML FILES WILL CONTAIN CANON COPYRIGHTED MATERIAL !!!'''
+
+'''!!! DO NOT SHARE THEM WITH ANYONE !!!'''
+
+(see the FAQ for details: [http://magiclantern.wikia.com/wiki/FAQ#How_do_I_get_a_ROM0.bin_firmware_image.3F])
+
+Of course, if you disassemble the Magic Lantern firmware (autoexec.bin), no Canon code will be in the output files.
+
+===Browsing the firmware: plain text===
+If you prefer to browse the disassembly in your favorite text editor, just export the disassembly to a file:
+
+    t2i.save_disasm("550d.108.dis")
+
+The format is somewhat similar to the one obtained with [http://chdk.wikia.com/wiki/GPL:disassemble.pl disassemble.pl from CHDK] (it uses objcopy/objdump).
+
+Main advantage over HTML: easy full-text search.
+
+===Browsing the firmware: IPython console===
+
+First, select a dump:
+    sel t2i
+
+For quick browsing, use the '''g''' magic command, which works somewhat like the G key in IDA:
+
+    %g 0xff053490+40
+    %g DebugMsg
+
+You may search for strings using a regex:
+    %s purple
+    %s (mvr|set).*filter
+
+Or search for references to some names / values:
+    %r additional_version
+    %r 0x1234
+
+From now on, TAB completion and quick help are your friends:
+ t2i.'''<TAB>'''
+ funcs           refs            strings            strrefs     ...etc...
+   ~t2i?
+ Base Class:	scripts.disasm.Dump
+ Docstring:
+     Contains all the info about a dump: ROM contents, disassembly, references, function names...
+ ... 
+
+Most of functions which output lots of text (like disasm, strings, refs) can display their output in a codebox (from [http://easygui.sourceforge.net/download/version0.96/tutorial/index.html easygui]). To enable that, just pass ''gui=1'' as the last argument:
+
+   ~t2i.refs("sounddev", gui=1)
+
+[[File:refs-sounddev.png|thumb|center]]
+
+If you want the gui boxes enabled by default, edit disasm.py (you'll find the setting there).
+
+===Annotating addresses in the firmware===
+
+You can use some functions whose names are inspired from IDAPython / IDC:
+
+    t2i.MakeName(0xFF06AFC0, "MEM_GetSizeOfMaxRegion")
+
+To delete a name, just say None (or empty string "") instead of name:
+
+    t2i.MakeName(0x4, None)
+
+To create a function, you can specify the start address and let it guess the end address:
+
+    t2i.MakeFunction(0xFF06A0F4)
+
+Of course, you can specify both the start and end addresses:
+
+    t2i.MakeFunction(0xFF06A0F4, FF06A138)
+
+Right now, things may go wrong if you try to remove a function or to change an existing one, so... don't!
+
+After you annotate some addresses in the firmware, you may want to see the new names in the HTML version. Just run:
+
+   ~html.update(t2i)
+
+It will (try to) update only the files which reference the newly annotated addresses.
+
+===Loading and saving names===
+
+If you want to load some names from another file, other than the auto-guessed ones, use this:
+   [0,1,2,"..."]t2i.load_names("stubs-550d.108.S")
+
+You can also pass an IDC file (it's autodetected).
+
+If you want to export your names, use:
+    t2i.save_names("mynames.S")
+    t2i.save_names("mynames.idc")
+
+What if you want to export only your changes? No problem:
+    t2i.save_new_names("mychanges.S")
+    t2i.save_new_names("mychanges.idc")
+
+   ~cat mychanges.S
+ #include <idc.idc>
+ static main() {
+   MakeName(0xFF06AFC0, MEM_GetSizeOfMaxRegion)
+   MakeName(0x4, "")
+ }
+
+   ~cat mychanges.idc
+ NSTUB(0xFF06AFC0, MEM_GetSizeOfMaxRegion)
+
+It will save only the names which were not loaded from a file. Deleted names are only saved in IDC format.
+
+Functions can't be exported yet, so for now it's better to use IDA for this. The demo version of IDA can import/export IDC files.
+
+===Matching functions and addresses between different firmware versions===
+
+See [[GPL Tools/match.py]].
+
+===NumPy'ing the firmware===
+If you like the idea of doing numerical analysis on camera's firmware, then this may be for you.
+
+If you already know Matlab or Octave, take a look here: http://www.scipy.org/NumPy_for_Matlab_Users
+
+Let's try a histogram of the values referenced in the code:
+
+    r = array([a[1] for a in t2i.REFLIST])
+   ~hist(r, 100)
+   ~show()
+[[File:hist-refs.png|thumb|center]]
+
+There are two big peaks, and we can't see what's besides them. Let's try a log hist:
+   ~cla()
+   ~hist(r, 100, log=1)
+[[File:hist-refs-log.png|thumb|center]]
+
+Let's zoom in a bit:
+    slice = r[(r>1000) & (r < 10000)]
+   ~cla()
+   ~hist(slice, 100)
+[[File:hist-smallrefs.png|thumb|center]]
+
+There are some peaks: they seem to be at 1024, 2048, 4096 and 8192 (since those are round numbers). Let's look at them:
+    b = bincount(slice.astype(int32))
+    o = argsort(-b)
+    o[:10]
+
+The next peak after those round numbers is 6464=0x1940. What could this be?
+   ~t2i.refs(6464, gui=1)
+[[File:refs-0x1940.png|thumb|center]]
+
+Want to see more lines before and after each reference?
+   ~t2i.refs(6464, context=5, gui=1)
+[[File:refs-0x1940-context.png|thumb|center]]
+
+So if you can figure out from this what 0x1940 is, you are a genius!
+
+==Running in non-interactive mode==
+Don't like the interactive mode? Start from "main.py" and create your own scripts. For example:
+
+ from scripts import *
+ D = load_dumps()
+ print D
+
+Save it as myscript.py for example, and run it like a normal Python script:
+ /home/user$ '''python myscript.py'''
+
+Hint: when debugging, try to test your script with a smaller dump, like autoexec.bin.
+
+==[[GPL Tools/ARM_console/API|API Reference]]==
+Don't miss this if you really want to use the script :)
+
+==What not to do==
+
+* '''Do not publish files which contain copyrighted code'''! (from Canon or from any other third party). If you do, you'll cause lots of trouble to the Magic Lantern community.
+* Do not load too many dumps at once! The script is VERY memory hungry, and '''IT CAN CRASH LINUX IN SECONDS!!!''' If the system starts swapping, you'll have to reboot your machine! Or disable the swap (like I did), and instead, the script (or other memory-hungry program) will be killed when it asks for too much memory.
+* Do not change the working directory! The scripts use relative paths and won't find their required files.
+
+----
+Enjoy!
+
+--~~~~
+
