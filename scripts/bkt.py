@@ -41,14 +41,14 @@ def back_solve(ea, unknowns):
 
     cp = [ea]
     lucky = True
-    while not isFuncStart(cp[0]) and len(cp) < 500:
+    while not isFuncStart(cp[0]) and len(cp) < 100:
         try:
             cp = go_back(cp)
             if lucky and regs == ['ARM.'+r for r in WrittenRegs(cp[0])]: # quick heuristic for a simple unknown
                 #~ print cp
                 sol = try_solve(cp,regs)
-                if sol: return sol
-                else: lucky = False
+                if sol is not None: return sol
+                #~ else: lucky = False
         except IndexError:
             print "WARNING: no code refs to %X" % cp[0]
             break
@@ -68,8 +68,8 @@ def try_solve(cp,regs,force=False):
     #~ print cp
     emusym_code_path(cp[:-1])
     val = string.join([str(eval(r)) for r in regs], " ")
-    #~ print val
-    if ("unk_" not in val) or force:
+    #~ print "val=",val
+    if ("unk_" not in val) or force or (len(val) > len(regs)*15):
         return [eval(r) for r in regs]
 
 
