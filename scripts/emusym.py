@@ -175,8 +175,9 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100):
                     #~ print "Tail call: ", GetDisasm(ea)
                     break
                 else:
-                    if ea in cp_only(cpf):
+                    if newAddr in cp_only(cpf):
                         print >> log, "loop"
+                        print >> log, cp_only(cpf)
                         cpf = cpf + [cpf[cp_only(cpf).index(ea)]]
                         #~ print "loop"
                         break
@@ -208,8 +209,9 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100):
                         newAddr = GetOperandValue(ea, 0)
                         print >> log, "new addr: %x" % newAddr
                         ea = newAddr
-                        if ea in cp_only(cpf):
+                        if newAddr in cp_only(cpf):
                             print >> log, "loop"
+                            print >> log, cp_only(cpf)
                             cpf = cpf + [cpf[cp_only(cpf).index(ea)]]
                             #print "loop"
                             break
