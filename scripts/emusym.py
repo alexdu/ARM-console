@@ -672,9 +672,9 @@ def create_graph(CP, filename="emusym.svg"):
             sb = filter_non_printable(sb).replace("{",r"\{").replace("}",r"\}")
 
             if ea not in nodes:
-                nodes[ea] = pydot.Node("N%X"%ea, label=sa, shape="box")
+                nodes[ea] = pydot.Node("_%X"%ea, label=sa, shape="box")
             if eb not in nodes:
-                nodes[eb] = pydot.Node("N%X"%eb, label=sb, shape="box")
+                nodes[eb] = pydot.Node("_%X"%eb, label=sb, shape="box")
             if (ea,eb) not in edges:
                 edges[(ea,eb)] = pydot.Edge(nodes[ea], nodes[eb], color=COLOR[(ea,eb)], weight=str(W[(ea,eb)]))
                 degi[ea] = degi.get(ea, 0) + 1
@@ -686,7 +686,7 @@ def create_graph(CP, filename="emusym.svg"):
         if degi[ea] == 1 and dego[eb] == 1:
             na,nb = nodes[ea], nodes[eb]
             print >> log, "merging nodes:", na.get_name(), nb.get_name()
-            newnode = pydot.Node(na.get_name() + "_" + nb.get_name(), label=na.get_label()[:-1] + "\\n" + nb.get_label()[1:], shape="box")
+            newnode = pydot.Node(na.get_name() + nb.get_name(), label=na.get_label()[:-1] + "\\n" + nb.get_label()[1:], shape="box")
             for k,n in nodes.iteritems():
                 if "%X"%k in newnode.get_name(): nodes[k] = newnode
 
