@@ -459,15 +459,15 @@ def func_update(F,quick=True):
         func_quick(F)
         if not quick: func_full(F)
 
-def full(D):
+def full(D,q=True):
     if type(D) != list: D = [D]
-    quick(D)
+    if q: quick(D)
     for dump in D:
         print "=" * (len(dump.bin) + 33)
         print "Running symbolic analysis for %s..." % dump.bin
         print "=" * (len(dump.bin) + 33)
         progress("Function analysis...")
-        for i,a in enumerate(dump.FUNCS):
+        for i,a in enumerate(sorted(dump.FUNCS, key=lambda x: funcname(dump, x))):
             #~ continue
             progress(float(i) / len(dump.FUNCS))
             F = dump.Fun(a)
