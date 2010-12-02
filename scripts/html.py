@@ -15,6 +15,7 @@ from scripts.fileutil import capture
 import shutil
 import cgi
 import cPickle
+from profilestats import profile
 
 def Template(*args,**kwargs):
     here = os.getcwd()
@@ -181,7 +182,9 @@ def disasm_html(dump, start, end, f=None):
         l = dump.DISASM.get(a)
         L = {}
         L['anchor'] = "_%X" % a
-        L['refs'] = string.join([link2addr(r) for r in CodeRefsTo(a)]).replace(">%X<" % (a-4), ">&#x2B01;<")
+        crefs = CodeRefsTo(a)
+        L['refs'] = string.join([link2addr(r) for r in crefs[:5]]).replace(">%X<" % (a-4), ">&#x2B01;<")
+        if len(crefs) > 5: L['refs'] += "... (total %d refs)" % len(crefs)
         if not l: 
             #~ print >> f, "%s: <empty>" % link2addr(a)
             continue
@@ -348,6 +351,7 @@ def strings_index(dump):
 
 def func_quick(F):
     dump = F.dump
+    select_dump(dump)
     es.resetLog()
     msg = str(F)
     ns = {}
@@ -373,6 +377,7 @@ def func_quick(F):
 def func_full(F):
     print F
     dump = F.dump
+    select_dump(dump)
     es.resetLog()
     msg = str(F)
     ns = {}
