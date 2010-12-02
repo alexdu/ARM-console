@@ -11,6 +11,8 @@
 *.S
 */
 !scripts/
+!scripts/html/
+!scripts/html/doc
 *.cache
 *.wiki
 *.txt

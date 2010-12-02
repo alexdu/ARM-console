@@ -1,0 +1,20 @@
+#from AsmBase import AsmBase
+#extends AsmBase
+#def title
+Names
+#end def
+#def content
+<h2>Names in $dumpname</h2>
+<table>
+<tr>
+    <th><a href="names-by-addr.htm">Address</a></th>
+    <th><a href="names-by-name.htm">Name</a></th>
+    <th><a href="names-by-ref.htm">References</a></th>
+</tr> 
+#for $name in $rows
+    <tr><td class=addr>$name['address']:</td><td class=instr>$name['name']</td>
+    <td class=namerefs>$name['refs']</td>
+    </tr>
+#end for
+</table>
+#end def

@@ -1,0 +1,28 @@
+#from AsmBase import AsmBase
+#extends AsmBase
+#def title
+Functions
+#end def
+#def content
+<h2>Functions in $dumpname</h2>
+<table>
+<tr>
+    <th><a href="functions-by-addr.htm">Address</a></th>
+    <th><a href="functions-by-name.htm">Name</a></th>
+    <th><a href="functions-by-size.htm">Size</a></th>
+    <th><a href="functions-by-callsto.htm">Calls to</a></th>
+    <th><a href="functions-by-callsfrom.htm">Calls from</a></th>
+    <th><a href="functions-by-source.htm">Source file</a></th>
+
+#for $func in $rows
+    <tr>
+        <td class=addr>$func['address']</td>
+        <td class=instr>$func['name']</td>
+        <td class=instr>$func['size']</td>
+        <td class=instr>$func['callsto']</td>
+        <td class=instr>$func['callsfrom']</td>
+        <td class=instr>$func['source']</td>
+    </tr>
+#end for
+</table> 
+#end def

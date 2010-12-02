@@ -1,0 +1,16 @@
+#from AsmBase import AsmBase
+#extends AsmBase
+#def title
+Strings
+#end def
+#def content
+<h2>Strings in $dumpname</h2>
+<table>
+<tr><th>Address</th><th>String</th><th>References</th><th></th></tr> 
+#for $string in $strings
+    <tr><td class=addr>$string['address']:</td><td class=instr>$string['msg']</td>
+    <td class=strrefs>$string['refs']</td>
+    </tr>
+#end for
+</table>
+#end def

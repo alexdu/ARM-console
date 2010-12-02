@@ -1,0 +1,64 @@
+#from AsmBase import AsmBase
+#extends AsmBase
+#def title
+$funcname
+#end def
+#def content
+<h2>Function $funcname at $funcaddr in $dumpname</h2>
+
+<div class="funcmenu">
+<ul>
+<li><a href="#disasm">Disassembly</a></li>
+<li><a href="#diagram">Code flow diagram</a></li>
+<li><a href="#deco">Decompiled</a></li>
+<li><a href="#refs">References</a></li>
+<li><a href="#calls">Calls</a></li>
+<li><a href="#callers">Called by</a></li>
+</ul>
+</div>
+
+<h2 id=disasm>Disassembly:</h2> 
+#include "scripts/html/disasm.tmpl"
+#if $codeflow
+<h2 id=diagram>Code flow diagram:</h2>
+    <object data='$codeflow' width='$codeflow_width'> </object>
+#end if
+<h2 id=deco>Decompiled:</h2> 
+<pre>
+$decompiled
+</pre> 
+<h2 id=refs>References:</h2> 
+<table>
+<tr><th>Address</th><th>Value</th></tr> 
+#for $ref in $references
+    <tr><td class=addr>$ref['address']:</td><td class=instr>$ref['value']</td>
+    </tr>
+#end for
+</table>
+<h2 id=calls>Calls:</h2> 
+<table>
+<tr><th>Address</th><th>Call line</th></tr> 
+#for $call in $calls
+    #if 'disasm' not in $call
+        <tr><td class=addr>$call['address']:</td><td colspan=4 class=instr>$call['func']$call['args']</td></tr>
+    #else
+        #for $line in $call['disasm']
+            <tr><td class=addr id=$line['anchor']>$call['address']:</td><td class=inst><span class="mnem">$line['mnem']</span><span class="flags">$line['flags']</span></td><td class=parm>$line['params']</td><td class=comm>$line['comment']</td><td> </td></tr>
+        #end for
+    #end if
+#end for
+</table>
+<h2 id=callers>Called by:</h2> 
+<table>
+<tr><th>Address</th><th>Call line</th></tr> 
+#for $call in $callers
+    #if 'disasm' not in $call
+        <tr><td class=addr>$call['address']:</td><td colspan=4 class=instr>$call['func']$call['args']</td></tr>
+    #else
+        #for $line in $call['disasm']
+            <tr><td class=addr id=$line['anchor']>$call['address']:</td><td class=inst><span class="mnem">$line['mnem']</span><span class="flags">$line['flags']</span></td><td class=parm>$line['params']</td><td class=comm>$line['comment']</td><td> </td></tr>
+        #end for
+    #end if
+#end for
+</table>
+#end def
