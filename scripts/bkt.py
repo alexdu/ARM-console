@@ -69,7 +69,7 @@ def try_solve(cp,regs,force=False):
     emusym_code_path(cp[:-1])
     val = string.join([str(eval(r)) for r in regs], " ")
     #~ print "val=",val
-    if ("unk_" not in val) or force or (len(val) > len(regs)*15):
+    if ("unk_" not in val) or force or (len(val) > len(regs)*10):
         return [eval(r) for r in regs]
 
 
