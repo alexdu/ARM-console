@@ -621,6 +621,7 @@ def load_dumps(regex=""):
 
     for b,i in idcs.iteritems(): # this needs cleanup
         D[b].A2N, D[b].N2A, D[b].FUNCS = cache.access(i, idc.parse)
+
         for f,e in D[b].FUNCS.iteritems():
             n = funcname(D[b],f)
             for a in range(f,e-3):
@@ -636,6 +637,15 @@ def load_dumps(regex=""):
         D[b].maxaddr = max(D[b].ROM)
         D[b].REFLIST = list(refs.iteritems())
         D[b].A2REFS, D[b].REF2AS = cache.access(b, lambda b: index_refs(refs, D[b].ROM))
+
+        dele = 0
+        for name, addr in list(D[b].N2A.iteritems()):
+            if len(name) >=2 and name[0] == 'a'and name[1] <= 'Z' and GuessString(D[b], addr):
+                del D[b].N2A[name]
+                del D[b].A2N[addr]
+                dele += 1
+        if dele: print "%s: deleted %d auto-generated string names." % (b, dele)
+
     cache.save()
     
     if len(D) == 1:
