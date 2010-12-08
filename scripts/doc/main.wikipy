@@ -44,6 +44,10 @@ Example of contents of the working folder:
  stubs-5d2.204.S                            [http://bitbucket.org/hudson/magic-lantern/src/tip/stubs-5d2.204.S]
  stubs-550d.108.S                           [http://bitbucket.org/hudson/magic-lantern/src/tip/stubs-550d.108.S]
 
+'''Make sure you set the correct load address for each dump! Otherwise, you'll just get wrong results without warning and you'll wonder why. To check the load address, look at the number of references to DebugMsg, assert and strings.'''
+
+It's possible to guess the load address like this: find the offset which maximizes the number of cross-references (to strings or something else easy recognizable). It takes a loooooooooong time even for the small ML dump, but it can be done with some clever subsampling tricks.
+
 ==Running in interactive mode==
 
 Start the program with:
@@ -83,10 +87,17 @@ You'll have to load stubs (*.S) files manually:
     ml.load_names("stubs-550d.108.S")
     ml.load_names("autoexec.S")
 
-===Automatic function guess===
+===Automatic analysis===
 
 This will try to find function calls and identify functions inside the firmware. Experimental, but should be harmless. I prefer to run it before generating the HTML.
    ~guessfunc.run(ml)
+
+This will find the source file where each function was defined, and extrapolate the result for the in-between function. It guesses source file name for around 4000 files. Also, it's good to run it before making the HTMLs.
+
+   ~srcguess.extrapolate(ml)
+   
+Here's a fromtend for running all automatic analysis steps which will provide extra info for the HTMLs:
+    html.auto(D)
 
 ===Browsing the firmware: HTML===
 Run this to create a browseable HTML like [http://a1ex.bitbucket.org/disasm-quick/index.htm this example]:

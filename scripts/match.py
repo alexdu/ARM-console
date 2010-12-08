@@ -629,6 +629,54 @@ def diff_side(dumpair, addrpair, score, sources, level=3):
         htm = re.sub(r,new,htm)
     return htm
 
+idch = """// Generated with ARM disassembly console
+// http://magiclantern.wikia.com/wiki/GPL_Tools/ARM_console
+#include <idc.idc>
+static main() {"""
+
+# all to one
+def sync(D,M,DM,idc=True,stub=False):
+    for dest in D:
+
+        names = []
+        for d in D:
+            if d != dest:
+                names += list(d.N2A)
+        if not names: 
+            print "Unchanged: %s" % dest.bin
+            continue
+
+        b = fileutil.change_ext(dest.bin, "")
+        print "Synchronizing %s with the others..." % b
+        if idc: 
+            newnames_idc = open("%s-new.idc" % b, "w")
+            existingnames_idc = open("%s-existing.idc" % b, "w")
+            print >> newnames_idc, idch
+            print >> existingnames_idc, idch
+        if stub: 
+            newnames_s = open("%s-new.S" % b, "w")
+            existingnames_s = open("%s-existing.S" % b, "w")
+
+        for n in sorted(names):
+            da = []
+            for d in D:
+                if n in d.N2A:
+                    da.append((d, d.N2A[n]))
+            m,s,c,fp = FindBestMatch(da, dest, M, DM)
+            if m:
+                print "NSTUB(%10s, %s)%s // %s" % ("0x%X"%m,n," " * (30-len(n)),c)
+                if m in dest.A2N:
+                    print " => already defined as %s" % (dest.A2N[m])
+                    if stub: print >> existingnames_s, "NSTUB(%10s, %s)%s // %s" % ("0x%X"%m,n," " * (30-len(n)),c)
+                    if idc: print >> existingnames_idc, "    MakeName(%10s, %s)%s // %s" % ("0x%X"%m,n," " * (30-len(n)),c)
+                else:
+                    if stub: print >> newnames_s, "NSTUB(%10s, %s)%s // %s" % ("0x%X"%m,n," " * (30-len(n)),c)
+                    if idc: print >> newnames_idc, "    MakeName(%10s, %s)%s // %s" % ("0x%X"%m,n," " * (30-len(n)),c)
+                    
+        if idc: 
+            print >> newnames_idc, "}"
+            print >> existingnames_idc, "}"
+
 if __name__ == "__main__":
     import doctest
     prepare_test()

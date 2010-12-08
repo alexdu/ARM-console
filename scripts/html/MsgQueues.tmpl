@@ -1,0 +1,24 @@
+#from AsmBase import AsmBase
+#extends AsmBase
+#def title
+Message Queues
+#end def
+#def content
+<h2>Message queues in $dumpname</h2>
+
+#for $func in $funcs
+    <h2 id=callers>Calls to $func['name']:</h2> 
+    <table>
+    <tr><th>Address</th><th>Call line</th></tr> 
+    #for $call in $func['callers']
+        #if 'disasm' not in $call
+            <tr><td class=addr>$call['address']:</td><td colspan=4 class=instr>$call['func']$call['args']</td></tr>
+        #else
+            #for $line in $call['disasm']
+                <tr><td class=addr id=$line['anchor']>$call['address']:</td><td class=inst><span class="mnem">$line['mnem']</span><span class="flags">$line['flags']</span></td><td class=parm>$line['params']</td><td class=comm>$line['comment']</td><td> </td></tr>
+            #end for
+        #end if
+    #end for
+    </table>
+#end for
+#end def

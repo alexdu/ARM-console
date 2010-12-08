@@ -12,10 +12,12 @@
     #if 'string' in $line
         <tr><td class=addr>$line['address']:</td><td class=string colspan=5>STRING: $line['string']</td></tr>
     #end if
-    #if 'undefined' in $line
-        <tr><td class=addr id=$line['anchor']>$line['address']:</td><td class=data>$line['data']</td><td colspan=2 class=inst>$line['inst']<td class=comm>$line['comment']</td><td class=refs>$line['refs']</td></tr>
-    #else
-        <tr><td class=addr id=$line['anchor']>$line['address']:</td><td class=data>$line['data']</td><td class=inst><span class="mnem">$line['mnem']</span><span class="flags">$line['flags']</span></td><td class=parm>$line['params']</td><td class=comm>$line['comment']</td><td class=refs>$line['refs']</td></tr>
+    #if not 'hidden' in $line
+        #if 'undefined' in $line
+            <tr><td class=addr id=$line['anchor']>$line['address']:</td><td class=data>$line['data']</td><td colspan=2 class=inst>$line['inst']<td class=comm>$line['comment']</td><td class=refs>$line['refs']</td></tr>
+        #else
+            <tr><td class=addr id=$line['anchor']>$line['address']:</td><td class=data>$line['data']</td><td class=inst><span class="mnem">$line['mnem']</span><span class="flags">$line['flags']</span></td><td class=parm>$line['params']</td><td class=comm>$line['comment']</td><td class=refs>$line['refs']</td></tr>
+        #end if
     #end if
     #if 'funcend' in $line
         <tr></td><td class=funcend colspan=6>Function end: $line['funcend']</td></tr>

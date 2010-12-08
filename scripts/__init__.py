@@ -16,7 +16,7 @@ from scripts.idapy import *
 from fileutil import *
 from progress import progress
 import funargs
-import bunch, cache, disasm, fileutil, idapy, idc, match, stats, emusym, deco, bkt, sympy, guessfunc, html, doc
+import bunch, cache, disasm, fileutil, idapy, idc, match, stats, emusym, deco, bkt, sympy, guessfunc, html, doc, srcguess
 
 
 print """

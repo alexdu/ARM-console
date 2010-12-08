@@ -470,15 +470,21 @@ def filter_non_printable(str):
         f = f.replace("  ", " ")
     return f
 
-
+   
 def CodeRefsTo(ea,ghost=0):
     CR = []
-    if (not ChangesPC(ea-4)) or (ChangesLR(ea-8)):
-        CR.append(ea-4)
-    else: # changes PC and it's not a call; if it's a conditional jump, skip it
-        if GetCondSuffix(ea-4):
+    if not callsAbortFunc(ea-4) and (ea-4) not in _d.STRMASK:
+        if (not ChangesPC(ea-4)) or (ChangesLR(ea-8)):
             CR.append(ea-4)
-            
+        else: # changes PC and it's not a call; if it's a conditional jump, skip it
+            if GetCondSuffix(ea-4):
+                CR.append(ea-4)      # or -8?
+    if callsAbortFunc(ea-4) and GetCondSuffix(ea-4):
+        c0 = GetCondSuffix(ea-4)
+        adr = ea-4
+        while GetCondSuffix(adr) == c0: adr -= 4
+        CR.append(adr) # skip assert
+        
     R = disasm.find_refs(_d, value=ea)
     for a,r in R:
         #~ if isFuncStart(r):
@@ -528,9 +534,28 @@ if __name__ == "__main__":
 
 # find a function addr in the code, starting from a list of possible names
 def find_func(possible_names):
+    print possible_names
     for ea,name in _d.A2N.iteritems():
         #~ print ea,name
         if name in possible_names:
             print "Function found at %x" % ea
             return ea
 
+    for ea in _d.FUNCS:
+        name = GetFunctionName(ea)
+        if name in possible_names:
+            print "Function found at %x" % ea
+            return ea
+
+    for ea in range(_d.minaddr, _d.maxaddr, 4):
+        name = GetFunctionName(ea)
+        if name in possible_names:
+            print "Function found at %x" % ea
+            return ea
+
+
+import emusym
+def callsAbortFunc(ea):
+    if GetMnem(ea) in ["BL", "BLX"] and emusym.isAbortFunc(GetOperandValue(ea,0)):
+        return True
+    return False

@@ -93,7 +93,7 @@ def find_some_kind_of_operation(t, optype=CALL):
         return A
     return []
 
-def decompile(ea, CP=None):
+def decompile(ea, CP=None, force=False):
     #~ print "finding code paths..."
     if CP is None: CP = emusym.find_code_paths(ea)
     CP = sorted(CP, key=lambda x: -len(x))
@@ -107,8 +107,11 @@ def decompile(ea, CP=None):
             has_loops = True
 
     if has_loops:
-        raise Exception, "code has loops => not implemented yet"
-        #~ time.sleep(1)
+        if force:
+            print "code has loops => expect bad results"
+            time.sleep(1)
+        else:
+            raise Exception, "code has loops => not implemented yet (use force=True to ignore this)"
         
 
         

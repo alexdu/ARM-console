@@ -69,7 +69,7 @@ def try_solve(cp,regs,force=False):
     emusym_code_path(cp[:-1])
     val = string.join([str(eval(r)) for r in regs], " ")
     #~ print "val=",val
-    if ("unk_" not in val) or force or (len(val) > len(regs)*10):
+    if ("unk_" not in val) or force or (len(val) > len(regs)*20):
         return [eval(r) for r in regs]
 
 
@@ -117,7 +117,7 @@ def find_func_call(ea, numargs):
     regs = back_solve(ea, allregs[:numargs])
     Regs = [STR(r, pointsto=True) for r in regs]
     #~ pprintpprint(ARM.MEMDIC)
-    return func_call_addr(ea), func_call_name(ea), "(" + string.join(Regs, ", ") + ")"
+    return func_call_addr(ea), func_call_name(ea), "(" + string.join(Regs, ", ") + ")", Regs
 
 
 # Traces all the calls to a function

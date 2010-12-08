@@ -49,16 +49,17 @@ class Dump(Bunch):
 
     def _get_strings_work(self):
         print "finding strings..."
-        STR = {}
+        STRMASK = {}
         STRINGS = {}
         ROM = self.ROM
         for addr in sorted(ROM.keys()):
             for i in range(4):
-                if addr+i not in STR:
+                if addr+i not in STRMASK:
                     s = GuessString(self, addr+i)
                     if s:
                         STRINGS[addr+i] = s
-                        for k in range(len(s)+1): STR[addr+i+k] = True
+                        for k in range(len(s)+1): STRMASK[addr+i+k] = True
+        self.STRMASK = STRMASK
         return STRINGS
     def _get_strings(self): 
         #return self._get_strings_work()
@@ -105,7 +106,7 @@ class Dump(Bunch):
                     if a > dump.loadaddr and a < dump.maxaddr:
                         tryMakeSub(dump,a)
         elif file.lower().endswith(".idc"):
-            a2n,n2a,fe = match.parse_stub(file)
+            a2n,n2a,fe = idc.parse(file)
         else:
             raise Exception, "Unrecognized extension: " + file
         
@@ -367,9 +368,11 @@ def parse_disasm(dump):
         if len(l) > 8 and l[8] == ":":
             items = l.split("\t")
             addr = int(items[0][:-1], 16)
-            raw = int(items[1], 16)
-            ROM[addr] = raw
-            DISASM[addr] = l
+            try: 
+                raw = int(items[1], 16)
+                ROM[addr] = raw
+                DISASM[addr] = l
+            except: pass
             
             try:
                 mnef = items[2]
@@ -579,7 +582,7 @@ def get_name(dump,name):
 
 
 def index_refs(refs, ROM):
-    print "Indexing references..."
+    print "Indexing references...",
     A2REFS = defaultdict(list)
     REF2AS = defaultdict(list)
     for a,r in refs.iteritems():
@@ -596,6 +599,7 @@ def index_refs(refs, ROM):
             except: pass
         except KeyError:
             pass
+    print "ok"
     return A2REFS, REF2AS
 
 def load_dumps(regex=""):
@@ -637,15 +641,17 @@ def load_dumps(regex=""):
         D[b].maxaddr = max(D[b].ROM)
         D[b].REFLIST = list(refs.iteritems())
         D[b].A2REFS, D[b].REF2AS = cache.access(b, lambda b: index_refs(refs, D[b].ROM))
-
+        
         dele = 0
         for name, addr in list(D[b].N2A.iteritems()):
-            if len(name) >=2 and name[0] == 'a'and name[1] <= 'Z' and GuessString(D[b], addr):
+            if len(name) >=2 and name[0] == 'a' and GuessString(D[b], addr):
                 del D[b].N2A[name]
                 del D[b].A2N[addr]
                 dele += 1
         if dele: print "%s: deleted %d auto-generated string names." % (b, dele)
 
+    for b,a in loadaddrs.iteritems():
+        D[b].STRINGS # compute them
     cache.save()
     
     if len(D) == 1:
@@ -986,7 +992,7 @@ static main() {
     for n,a in dump._loadednames.iteritems():
         if n not in dump.N2A:
             dele += 1
-            print >> file, '    MakeName(%10s, "")' % ("0x%X"%a)
+            print >> file, '    MakeName(%10s, "") // old name: %s' % ("0x%X"%a, n)
     
     print >> file, "}"
     file.close()

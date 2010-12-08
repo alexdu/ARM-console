@@ -440,7 +440,7 @@ class SEQ(Function):
         return SEQ(*A)
 
 #~ voidfuncs = ["assert_0", "DebugMsg"]
-abortfuncs = ["assert_0", "assert"]
+abortfuncs = ["assert_0", "assert", "TH_assert"]
 
 #~ def isVoidFunc(ea):
     #~ return GetFunctionName(ea) in voidfuncs
@@ -1293,8 +1293,8 @@ def emusym_code_path(cpf, codetree=False):
                     except: 
                         AddInstr(Symbol("Buggy_CALL"))
                         raise
-                run("ARM.R0 = Symbol('%s')" % RetName(func, ea))
                 if isAbortFunc(func): break
+                run("ARM.R0 = Symbol('%s')" % RetName(func, ea))
     
 
         elif IsReturn(ea):
@@ -1325,21 +1325,20 @@ def emusym_code_path(cpf, codetree=False):
                 except: 
                     AddInstr(Symbol("Buggy_CALL"))
                     raise
-            run("ARM.R0 = Symbol('%s')" % RetName(func, ea))
             if isAbortFunc(func): break
+            run("ARM.R0 = Symbol('%s')" % RetName(func, ea))
 
         elif mne == "BLX":
             dest,post = TranslateOperand(ea,0)
             func = eval(dest)            
             if codetree: 
-                if codetree: 
-                    try: AddInstr(CALL(ea, func, ARM.R0, ARM.R1, ARM.R2, ARM.R3, MEM(ARM.SP), MEM(ARM.SP+4), MEM(ARM.SP+8), MEM(ARM.SP+12)))
-                    except: 
-                        AddInstr(Symbol("Buggy_CALL"))
-                        raise
+                try: AddInstr(CALL(ea, func, ARM.R0, ARM.R1, ARM.R2, ARM.R3, MEM(ARM.SP), MEM(ARM.SP+4), MEM(ARM.SP+8), MEM(ARM.SP+12)))
+                except: 
+                    AddInstr(Symbol("Buggy_CALL"))
+                    raise
 
-            run("ARM.R0 = Symbol('ret_%s_%s')" % (func, "%X"%ea))
             if isAbortFunc(func): break
+            run("ARM.R0 = Symbol('ret_%s_%s')" % (func, "%X"%ea))
 
         elif mne == "BX":
             if lr_stored:
@@ -1357,12 +1356,14 @@ def emusym_code_path(cpf, codetree=False):
                     except: 
                         AddInstr(Symbol("Buggy_CALL"))
                         raise
-                run("ARM.R0 = Symbol('%s')" % RetName(func, ea))
+
                 if isAbortFunc(func): break
+                run("ARM.R0 = Symbol('%s')" % RetName(func, ea))
 
             else:
                 dest,post = TranslateOperand(ea,0)
                 if codetree: AddInstr(JUMP(eval(dest)))
+                break
 
         else:
             print >> log, "unhandled:", GetDisasmQ(ea)

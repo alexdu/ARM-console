@@ -19,6 +19,9 @@ from profilestats import profile
 import traceback
 import idapy
 
+# auto analysis
+import srcguess, guessfunc
+
 def Template(*args,**kwargs):
     here = os.getcwd()
     os.chdir("scripts/html/")
@@ -119,7 +122,7 @@ def calls_html(dump, F):
             try: call = bkt.find_func_call(a, len(funargs.getFuncSignature(calledfun).args))
             except: continue
             c = {'address': link2funcoff(dump, a)}
-            funaddr, funname, args = bkt.find_func_call(a, len(funargs.getFuncSignature(calledfun).args))
+            funaddr, funname, args, argz = bkt.find_func_call(a, len(funargs.getFuncSignature(calledfun).args))
             try: fun = dump.Fun(funaddr)
             except: fun = None
             c['func'] = link2func(fun) if fun else funname
@@ -148,7 +151,7 @@ def callers_html(dump,value=None, func=None, context=0, f=sys.stdout):
         try:
             #~ print a, calledfun, value
             c = {'address': link2funcoff(dump, a)}
-            funaddr, funname, args = bkt.find_func_call(a, len(funargs.getFuncSignature(calledfun).args))
+            funaddr, funname, args, argz = bkt.find_func_call(a, len(funargs.getFuncSignature(calledfun).args))
             try: fun = dump.Fun(funaddr)
             except: fun = None
             c['func'] = funname
@@ -268,7 +271,10 @@ def disasm_html(dump, start, end, f=None):
             if addr+4 in dump.FUNCENDS:
                 st = dump.FUNCENDS[addr+4]
                 L['funcend'] = funcname(dump, which_func(dump,addr))
-                            
+
+            if a in dump.STRMASK:
+                L['hidden'] = True
+
             for i in range(4):
                 if GuessString(dump, addr+i) and not GuessString(dump, addr+i-1):
                     s = GuessString(dump, addr+i)
@@ -277,22 +283,21 @@ def disasm_html(dump, start, end, f=None):
     return LINES
 
 
-def sourcefile(dump, addr):
-    refs = find_refs(dump, func=addr)
-    for a,v in refs:
-        s = GuessString(dump, v)
-        if s:
-            if s.endswith(".c") or s.endswith(".cfg"):
-                return s
-    return "~"
 
 def table(dump, template, dinosaur):
+    cache = {}
     for lis,fn,fi,var in dinosaur:
         items = []
         for F in lis:
             item = {}
             for lis2,fn2,fi2,var2 in dinosaur:
-                item[var2] = fi2(F)
+                key = (str(var2),str(F))
+                if key in cache:
+                    item[var2] = cache[key]
+                else:
+                    value = fi2(F)
+                    item[var2] = value
+                    cache[key] = value
             items.append(item)
         f = openf(dump.bin, fn)
         ns = {'dumpname': dump.bin, "rows": items}
@@ -328,14 +333,14 @@ def func_index(dump):
     Fs  = [dump.Fun(a) for a in sorted(dump.FUNCS.keys(), key=lambda x: -dump.Fun(x).size)]
     Fcf = [dump.Fun(a) for a in sorted(dump.FUNCS.keys(), key=lambda x: -len(filter(lambda av: av[1] in dump.FUNCS, find_refs(dump, None, x))))]
     Fct = [dump.Fun(a) for a in sorted(dump.FUNCS.keys(), key=lambda x: -len(find_refs(dump, x)))]
-    Fsf = [dump.Fun(a) for a in sorted(dump.FUNCS.keys(), key=lambda x: sourcefile(dump, x))]
+    Fsf = [dump.Fun(a) for a in sorted(dump.FUNCS.keys(), key=lambda x: srcguess.sourcefile(dump, x) or "~")]
 
     dinosaur = [(Fn, "functions-by-name.htm", lambda f: link2func(f), 'name'),
                 (Fa, "functions-by-addr.htm", lambda f: link2addr(f.addr), "address"),
                 (Fs, "functions-by-size.htm", lambda f: f.size, "size"),
                 (Fcf, "functions-by-callsfrom.htm", lambda f: len(filter(lambda av: av[1] in dump.FUNCS, find_refs(dump, None, f.addr))), "callsfrom"),
                 (Fct, "functions-by-callsto.htm", lambda f: len(find_refs(dump, f.addr)), "callsto"),
-                (Fsf, "functions-by-source.htm", lambda f: sourcefile(dump, f.addr), "source")]
+                (Fsf, "functions-by-source.htm", lambda f: srcguess.sourcefile(dump, f.addr), "source")]
 
     table(dump, "FuncIndex.tmpl", dinosaur)
 
@@ -348,7 +353,7 @@ def strings_index(dump):
     for addr,s in sorted(dump.STRINGS.iteritems()):
         refs = find_refs(dump,addr)
         reflist = [link2addr(a) for a,v in refs]
-        s = {'address': addr, 'msg': cgi.escape(repr(s)), 'refs': string.join(reflist, ", ")}
+        s = {'address': link2addr(addr), 'msg': cgi.escape(repr(s)), 'refs': string.join(reflist, ", ")}
         strings.append(s)
     ns["strings"] = strings
     ns['dumpname'] = dump.bin
@@ -364,6 +369,7 @@ def func_quick(F):
     ns['funcname'] = F.name
     ns['funcaddr'] = hex(F.addr)
     ns['dumpname'] = dump.bin
+    ns['sourcefile'] = srcguess.sourcefile(dump, F.addr)
     ns['codeflow'] = ""
     ns['decompiled'] = "in progress..."
 
@@ -390,6 +396,7 @@ def func_full(F):
     ns['funcname'] = F.name
     ns['funcaddr'] = hex(F.addr)
     ns['dumpname'] = dump.bin
+    ns['sourcefile'] = srcguess.sourcefile(dump, F.addr)
     ns['codeflow'] = ""
     ns['decompiled'] = "too complex?"
 
@@ -461,7 +468,13 @@ def func_update(F,quick=True):
 
 def full(D,q=True):
     if type(D) != list: D = [D]
+
+    try: auto(D)
+    except: print "Auto analysis failed"
+
+
     if q: quick(D)
+    
     for dump in D:
         print "=" * (len(dump.bin) + 33)
         print "Running symbolic analysis for %s..." % dump.bin
@@ -480,19 +493,26 @@ def update(D, quick=True):
         for i,a in enumerate(dump.FUNCS):
             F = dump.Fun(a)
             func_update(f, quick)
-
+def index(D):
+    if type(D) != list: D = [D]
+    for dump in D:
+        select_dump(dump)
+        print "=" * (len(dump.bin) + 22)
+        print "Creating index for %s..." % dump.bin
+        print "=" * (len(dump.bin) + 22)
+        name_index(dump)
+        func_index(dump)
+        strings_index(dump)
+        shutil.copyfile("scripts/html/disasm.css", os.path.join(change_ext(dump.bin, ""), "disasm.css"))
+    
 def quick(D):
+    index(D)
     if type(D) != list: D = [D]
     for dump in D:
         print "=" * (len(dump.bin) + 17)
         print "Disassembling %s..." % dump.bin
         print "=" * (len(dump.bin) + 17)
         select_dump(dump)
-        name_index(dump)
-        func_index(dump)
-        strings_index(dump)
-        shutil.copyfile("scripts/html/disasm.css", os.path.join(change_ext(dump.bin, ""), "disasm.css"))
-
         
         progress("Function disassembly...")
         for i,a in enumerate(dump.FUNCS):
@@ -515,6 +535,228 @@ def quick(D):
             print >> f, Template(file="RawDisasm.tmpl", searchList=[ns])
             f.close()
 
+
+def tasks(D):
+    if type(D) != list: D = [D]
+    for dump in D:
+        select_dump(dump)
+        ns = {}
+        ns['dumpname'] = dump.bin
+
+        Funcs = []
+        C = bkt.trace_calls_to(["CreateTask","AJ_task_create_R0.name_R1.priority_R2.unk_R3.Sub_SP.taskStruct"],4)
+        extras = []
+        F = {'name': 'CreateTask'}
+        callers = []
+        for a,c in C.iteritems():
+            callers.append({'address': link2funcoff(dump, a), 'func': c[1], 'args': c[2]})
+            if c[3][0] in ["arg0", "arg1", "arg2", "arg3"]:
+                print a, GetFunctionName(a)
+                extras.append(GetFunctionName(a))
+        F['callers'] = callers
+        Funcs.append(F)
+        for e in extras:
+            print
+            print e
+            print "================="
+            F = {'name': e}
+            C = bkt.trace_calls_to(e,4)
+            callers = []
+            for a,c in C.iteritems():
+                callers.append({'address': link2funcoff(dump, a), 'func': c[1], 'args': c[2]})
+                print c[1] + c[2]
+            F['callers'] = callers
+            Funcs.append(F)
+        
+        ns['funcs'] = Funcs
+        print Funcs[0]
+        f = openf(dump.bin, "tasks.htm")
+        print >> f, Template(file="Tasks.tmpl", searchList=[ns])
+        f.close()
+
+
+def semaphores(D):
+    if type(D) != list: D = [D]
+    for dump in D:
+        select_dump(dump)
+        ns = {}
+        ns['dumpname'] = dump.bin
+
+        Funcs = []
+        C = bkt.trace_calls_to(["CreateBinarySemaphore","TH_create_named_semaphore"],2)
+        extras = []
+        F = {'name': 'CreateBinarySemaphore'}
+        callers = []
+        for a,c in C.iteritems():
+            callers.append({'address': link2funcoff(dump, a), 'func': c[1], 'args': c[2]})
+            if c[3][0] in ["arg0", "arg1"]:
+                print a, GetFunctionName(a)
+                extras.append(GetFunctionName(a))
+        F['callers'] = callers
+        Funcs.append(F)
+        for e in extras:
+            print
+            print e
+            print "================="
+            F = {'name': e}
+            C = bkt.trace_calls_to(e,2)
+            callers = []
+            for a,c in C.iteritems():
+                callers.append({'address': link2funcoff(dump, a), 'func': c[1], 'args': c[2]})
+                print c[1] + c[2]
+            F['callers'] = callers
+            Funcs.append(F)
+        
+        ns['funcs'] = Funcs
+        print Funcs[0]
+        f = openf(dump.bin, "semaphores.htm")
+        print >> f, Template(file="Semaphores.tmpl", searchList=[ns])
+        f.close()
+
+def msgqueues(D):
+    if type(D) != list: D = [D]
+    for dump in D:
+        select_dump(dump)
+        ns = {}
+        ns['dumpname'] = dump.bin
+
+        Funcs = []
+        C = bkt.trace_calls_to(["CreateMessageQueue","TH_msg_queue_receive"],2)
+        extras = []
+        F = {'name': 'CreateMessageQueue'}
+        callers = []
+        for a,c in C.iteritems():
+            callers.append({'address': link2funcoff(dump, a), 'func': c[1], 'args': c[2]})
+            if c[3][0] in ["arg0", "arg1"]:
+                print a, GetFunctionName(a)
+                extras.append(GetFunctionName(a))
+        F['callers'] = callers
+        Funcs.append(F)
+        for e in extras:
+            print
+            print e
+            print "================="
+            F = {'name': e}
+            try: C = bkt.trace_calls_to(e,2)
+            except: continue
+            callers = []
+            for a,c in C.iteritems():
+                callers.append({'address': link2funcoff(dump, a), 'func': c[1], 'args': c[2]})
+                print c[1] + c[2]
+            F['callers'] = callers
+            Funcs.append(F)
+        
+        ns['funcs'] = Funcs
+        print Funcs[0]
+        f = openf(dump.bin, "msgqueues.htm")
+        print >> f, Template(file="MsgQueues.tmpl", searchList=[ns])
+        f.close()
+
+def auto(D):
+    if type(D) != list: D = [D]
+    for dump in D:
+        select_dump(dump)
+        srcguess.extrapolate(dump)
+    #~ for dump in D:
+        #~ guessfunc.run(dump)
+    tasks(D)
+    semaphores(D)
+    msgqueues(D)
+    properties(D)
+    eventprocs(D)
+
+def properties(D):
+    if type(D) != list: D = [D]
+    for dump in D:
+        select_dump(dump)
+        ns = {}
+        ns['dumpname'] = dump.bin
+        Props = defaultdict(list)
+
+        Funcs = []
+        C = bkt.trace_calls_to(["prop_request_change","TH_prop_request_change"],3)
+        extras = [["prop_register_slave", "TH_prop_register_slave"]]
+        F = {'name': 'prop_request_change'}
+        callers = []
+        for a,c in C.iteritems():
+            callers.append({'address': link2funcoff(dump, a), 'func': c[1], 'args': c[2]})
+            if c[3][0] in ["arg0", "arg1", "arg2"]:
+                print a, GetFunctionName(a)
+                extras.append(GetFunctionName(a))
+            
+            try:
+                try: addr = int(c[3][0], 16)
+                except: addr = int(c[3][0])
+
+                try: size = int(c[3][2], 16)
+                except: size = int(c[3][2])
+                
+                Props[addr].append(size)
+            except: pass
+        F['callers'] = callers
+        Funcs.append(F)
+        for e in extras:
+            print
+            print e
+            print "================="
+            F = {'name': e}
+            try: C = bkt.trace_calls_to(e,6)
+            except: continue
+            callers = []
+            for a,c in C.iteritems():
+                callers.append({'address': link2funcoff(dump, a), 'func': c[1], 'args': c[2]})
+                print c[1] + c[2]
+            F['callers'] = callers
+            Funcs.append(F)
+        
+        ns['funcs'] = Funcs
+        
+        for a in copy(Props.keys()):
+            Props[a] = string.join([str(x) for x in set(Props[a])], ", ")
+        ns['props'] = Props
+        print Funcs[0]
+        f = openf(dump.bin, "properties.htm")
+        print >> f, Template(file="Properties.tmpl", searchList=[ns])
+        f.close()
+
+def eventprocs(D):
+    if type(D) != list: D = [D]
+    for dump in D:
+        select_dump(dump)
+        ns = {}
+        ns['dumpname'] = dump.bin
+
+        Funcs = []
+        C = bkt.trace_calls_to(["register_func","AJ_register_func"],3)
+        extras = [['call', 'TH_call']]
+        F = {'name': 'register_func'}
+        callers = []
+        for a,c in C.iteritems():
+            callers.append({'address': link2funcoff(dump, a), 'func': c[1], 'args': c[2]})
+            if c[3][0] in ["arg0", "arg1", "arg2"]:
+                print a, GetFunctionName(a)
+                extras.append(GetFunctionName(a))
+        F['callers'] = callers
+        Funcs.append(F)
+        for e in extras:
+            print
+            print e
+            print "================="
+            F = {'name': e}
+            try: C = bkt.trace_calls_to(e,4)
+            except: continue
+            callers = []
+            for a,c in C.iteritems():
+                callers.append({'address': link2funcoff(dump, a), 'func': c[1], 'args': c[2]})
+                print c[1] + c[2]
+            F['callers'] = callers
+            Funcs.append(F)
+        
+        ns['funcs'] = Funcs
+        print Funcs[0]
+        f = openf(dump.bin, "eventprocs.htm")
+        print >> f, Template(file="Eventprocs.tmpl", searchList=[ns])
+        f.close()
 
 if __name__ == "__main__":
     import doctest

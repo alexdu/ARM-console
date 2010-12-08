@@ -23,5 +23,5 @@ def progress(x, interval=1):
         _progress_interval = interval
     else:    
         if time.time() - _progress_last_time > _progress_interval:
-            print >> sys.stderr, "%s [%.2g%% done, ETA %s]..." % (_progress_message, 100*p, datetime.timedelta(seconds = round((1-p)/p*(time.time()-_progress_first_time))))
+            print >> sys.stderr, "%s [%d%% done, ETA %s]..." % (_progress_message, int(100*p), datetime.timedelta(seconds = round((1-p)/p*(time.time()-_progress_first_time))))
             _progress_last_time = time.time()

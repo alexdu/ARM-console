@@ -6,6 +6,9 @@ $funcname
 #def content
 <h2>Function $funcname at $funcaddr in $dumpname</h2>
 
+#if $sourcefile
+    <h2>Source file: $sourcefile</h2>
+#end if
 <div class="funcmenu">
 <ul>
 <li><a href="#disasm">Disassembly</a></li>
