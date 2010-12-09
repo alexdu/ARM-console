@@ -701,10 +701,10 @@ def sync(D,M,DM,idc=True,stub=False):
             if m in dest.A2N:
                 #~ print " => already defined as %s" % (dest.A2N[m])
                 if stub: print >> existingnames_s, "NSTUB(%10s, %s)%s // [already defined as %s] %s" % ("0x%X"%m,n," " * (30-len(n)), (dest.A2N[m]), c)
-                if idc: print >> existingnames_idc, "    MakeName(%10s, %s)%s // [already defined as %s] %s" % ("0x%X"%m,n," " * (30-len(n)), (dest.A2N[m]), c)
+                if idc: print >> existingnames_idc, '    MakeName(%10s, "%s")%s // [already defined as %s] %s' % ("0x%X"%m,n," " * (30-len(n)), (dest.A2N[m]), c)
             else:
                 if stub: print >> newnames_s, "NSTUB(%10s, %s)%s // %s" % ("0x%X"%m,n," " * (30-len(n)),c)
-                if idc: print >> newnames_idc, "    MakeName(%10s, %s)%s // %s" % ("0x%X"%m,n," " * (30-len(n)),c)
+                if idc: print >> newnames_idc, '    MakeName(%10s, "%s")%s // %s' % ("0x%X"%m,n," " * (30-len(n)),c)
                     
         if idc: 
             print >> newnames_idc, "}"
