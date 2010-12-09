@@ -110,7 +110,7 @@ class Dump(Bunch):
         else:
             raise Exception, "Unrecognized extension: " + file
         
-        for a,n in a2n.iteritems(): 
+        for n,a in n2a.iteritems(): 
             dump.MakeName(a,n)
         for f,e in fe.iteritems():
             dump.MakeFunction(f,e)
@@ -149,11 +149,13 @@ class Dump(Bunch):
             except KeyError: pass
             del dump.N2A[name]
             return
-        if name in dump.N2A:
-            print "Overwriting name %s" % name
-            try: del dump.A2N[dump.N2A[name]]
+        if name in dump.N2A or addr in dump.A2N:
+            if name not in dump.N2A: oldname = dump.A2N[addr]
+            else: oldname = name
+            print "Overwriting %x -> %s with %s" % (dump.N2A[oldname], oldname, name)
+            try: del dump.A2N[dump.N2A[oldname]]
             except KeyError: pass
-            del dump.N2A[name]
+            del dump.N2A[oldname]
         dump.A2N[addr] = name
         dump.N2A[name] = addr
 
@@ -582,7 +584,7 @@ def get_name(dump,name):
 
 
 def index_refs(refs, ROM):
-    print "Indexing references...",
+    print "Indexing references...",  ; sys.stdout.flush()
     A2REFS = defaultdict(list)
     REF2AS = defaultdict(list)
     for a,r in refs.iteritems():
@@ -986,7 +988,7 @@ static main() {
     if na is None:
         na = sorted(dump.N2A.iteritems())
     for n,a in na:
-        print >> file, "    MakeName(%10s, %s)" % ("0x%X"%a,n)
+        print >> file, '    MakeName(%10s, "%s")' % ("0x%X"%a,n)
 
     dele = 0
     for n,a in dump._loadednames.iteritems():
