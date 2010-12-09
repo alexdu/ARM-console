@@ -93,7 +93,7 @@ def find_some_kind_of_operation(t, optype=CALL):
         return A
     return []
 
-def decompile(ea, CP=None, force=False):
+def decompile(ea, CP=None, force=False, raw=False):
     #~ print "finding code paths..."
     if CP is None: CP = emusym.find_code_paths(ea)
     CP = sorted(CP, key=lambda x: -len(x))
@@ -136,7 +136,7 @@ def decompile(ea, CP=None, force=False):
         mt = merge_trees(mt, ct)
     #~ print "merged"
 
-    #~ return mt
+    if raw: return mt
 
     print "rebuilding"
     T = []
