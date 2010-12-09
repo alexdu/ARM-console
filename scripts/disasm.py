@@ -988,13 +988,13 @@ static main() {
     if na is None:
         na = sorted(dump.N2A.iteritems())
     for n,a in na:
-        print >> file, '    MakeName(%10s, "%s")' % ("0x%X"%a,n)
+        print >> file, '    MakeName(%10s, "%s");' % ("0x%X"%a,n)
 
     dele = 0
     for n,a in dump._loadednames.iteritems():
         if n not in dump.N2A:
             dele += 1
-            print >> file, '    MakeName(%10s, "") // old name: %s' % ("0x%X"%a, n)
+            print >> file, '    MakeName(%10s, ""); // old name: %s' % ("0x%X"%a, n)
     
     print >> file, "}"
     file.close()
