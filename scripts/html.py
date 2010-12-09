@@ -101,12 +101,16 @@ def refs_html(dump,value=None, func=None, context=0, f=sys.stdout):
     return R
 
 def refsig(F):
-    R = ""
+    R = F.name
     dump = F.dump
     refs = find_refs(dump, None, F.addr)
     for a,v in refs:
         if v > 0x1000 and v == dump.A2REFS[a][0]:
             R += "%x %s\n" % (a, guess_data(dump, v))
+    refs = find_refs(dump, F.addr)
+    for a,v in refs:
+        R += idapy.GetFuncOffset(a) + "\n"
+
     return R
     
 def calls_html(dump, F):
@@ -454,13 +458,17 @@ def func_full(F):
 
 def func_update(F,quick=True):
     try:
-        f = openf(dump.bin, funcsigfile(F), 'r')
-        s = cPickle.load(f)
-        f.close()
+        #~ print funcsigfile(F)
+        f = openf(F.dump.bin, funcsigfile(F), 'r')
     except:
+        #~ raise
         print "Signature not found for %s => updating" % F.name
         func_quick(F)
         if not quick: func_full(F)
+        return
+    
+    s = cPickle.load(f)
+    f.close()
     if s != refsig(F):
         print "Signature has changed for %s => updating" % F.name
         func_quick(F)
@@ -486,13 +494,16 @@ def full(D,q=True):
             F = dump.Fun(a)
             func_full(F)
 
-
+#~ @profile
 def update(D, quick=True):
     if type(D) != list: D = [D]
     for dump in D:
+        progress("updating functions in %s..." % dump.bin)
+        num = len(dump.FUNCS)
         for i,a in enumerate(dump.FUNCS):
+            progress(float(i) / num)
             F = dump.Fun(a)
-            func_update(f, quick)
+            func_update(F, quick)
 def index(D):
     if type(D) != list: D = [D]
     for dump in D:
