@@ -127,19 +127,24 @@ Outputs: a dictionary of data matches (DM) and a dictionary of sources (SRC, i.e
 This function also creates data-matches.txt and possible-code-matches.txt (one for data addresses and other for functions).
 
 ===Scoring===
-   ~Score(dumpair, addrpair)
-   ~Score_refmatch(dumpair, addrpair, srcscores)
+   ~match.Score(dumpair, addrpair)
+   ~match.Score_refmatch(dumpair, addrpair, srcscores)
 
-    combined_score([1,2,10,20])
-    combined_score([5])
-    combined_score([5,5])
+    match.combined_score([1,2,10,20])
+    match.combined_score([5])
+    match.combined_score([5,5])
 
 ===MakeStubs===
 
 This is used for creating stubs for a new firmware version. See the Usage section.
 
-===SyncIDC===
-Not implemented yet. It will write some IDCs for name syncing purposes.
+===sync===
+
+Sync the name databases (IDC or S) between two dumps. You have to run CodeMatch and DataMatch before that.
+
+   ~match.sync(D,M,DM,idc=True,stub=False)
+
+For each dump, it creates two files: one with new names (wich are present in other dumps), and one with existing names (which are named in both dumps, usually with different names). Output can be in IDC or S format. It takes around 15-30 minutes to sync 2 dumps (excluding matching).
 
 ==Logs==
 ====MakeStubs-diff.htm====

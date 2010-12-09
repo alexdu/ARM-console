@@ -11,6 +11,7 @@ import disasm, fileutil, math
 from collections import defaultdict
 import difflib, sys, os, re, string
 from bunch import Bunch
+import progress
 #~ import subprocess, shlex
 
 diff_header = """
@@ -42,8 +43,8 @@ diff_footer = """
 </html>
 """
 
-restub = r"\s*NSTUB\s*\((.*),([^\)]*)\)"
-redef = r"\s*DEF\s*\((.*),([^\)]*)\)"
+restub = r"\s*NSTUB\s*\(([^,]*),([^\)]*)\)"
+redef = r"\s*DEF\s*\(([^,]*),([^\)]*)\)"
 
 def parse_stub(file):
     A2N = {}
@@ -513,6 +514,28 @@ def remove_duplicate_matches(M):
         print "Remaining %d code matches between %s and %s." % (len(newM[key]), key[0].bin, key[1].bin)
     return newM
 
+# not yet working
+def remove_duplicate_datamatches(DM,SRC):
+    print "Removing duplicates..."
+    newM = {}
+    for (d1,d2),m in M.iteritems():
+        
+        m.sort(key=lambda x: Score_refmatch((d1,d2),x), reverse=True)
+        
+        newm = []
+        handled = {}
+        
+        for a1,a2 in m:
+            if handled.get(a1): continue
+            if handled.get(a2): continue
+            newm.append((a1,a2))
+            handled[a1] = True
+            handled[a2] = True
+        
+        newM[(d1,d2)] = newm
+    for key in newM:
+        print "Remaining %d code matches between %s and %s." % (len(newM[key]), key[0].bin, key[1].bin)
+    return newM
 rawlog = False
 def save_raw_match_log(M, filename):
     if rawlog:
@@ -647,7 +670,7 @@ def sync(D,M,DM,idc=True,stub=False):
             continue
 
         b = fileutil.change_ext(dest.bin, "")
-        print "Synchronizing %s with the others..." % b
+        progress.progress("Sync'ing %s with the others..." % dest.bin)
         if idc: 
             newnames_idc = open("%s-new.idc" % b, "w")
             existingnames_idc = open("%s-existing.idc" % b, "w")
@@ -657,21 +680,31 @@ def sync(D,M,DM,idc=True,stub=False):
             newnames_s = open("%s-new.S" % b, "w")
             existingnames_s = open("%s-existing.S" % b, "w")
 
-        for n in sorted(names):
+        A = {}
+        for k,n in enumerate(sorted(names)):
+            progress.progress(float(k) / len(names))
             da = []
             for d in D:
                 if n in d.N2A:
                     da.append((d, d.N2A[n]))
             m,s,c,fp = FindBestMatch(da, dest, M, DM)
             if m:
-                print "NSTUB(%10s, %s)%s // %s" % ("0x%X"%m,n," " * (30-len(n)),c)
-                if m in dest.A2N:
-                    print " => already defined as %s" % (dest.A2N[m])
-                    if stub: print >> existingnames_s, "NSTUB(%10s, %s)%s // %s" % ("0x%X"%m,n," " * (30-len(n)),c)
-                    if idc: print >> existingnames_idc, "    MakeName(%10s, %s)%s // %s" % ("0x%X"%m,n," " * (30-len(n)),c)
+                if m in A:
+                    if s > A[m][1]:
+                        print "better match, replacing"
+                        A[m] = (n,s,c,fp)
                 else:
-                    if stub: print >> newnames_s, "NSTUB(%10s, %s)%s // %s" % ("0x%X"%m,n," " * (30-len(n)),c)
-                    if idc: print >> newnames_idc, "    MakeName(%10s, %s)%s // %s" % ("0x%X"%m,n," " * (30-len(n)),c)
+                    A[m] = (n,s,c,fp)
+        print "saving..."
+        for m,(n,s,c,fp) in A.iteritems():
+            #~ print "NSTUB(%10s, %s)%s // %s" % ("0x%X"%m,n," " * (30-len(n)),c)
+            if m in dest.A2N:
+                #~ print " => already defined as %s" % (dest.A2N[m])
+                if stub: print >> existingnames_s, "NSTUB(%10s, %s)%s // [already defined as %s] %s" % ("0x%X"%m,n," " * (30-len(n)), (dest.A2N[m]), c)
+                if idc: print >> existingnames_idc, "    MakeName(%10s, %s)%s // [already defined as %s] %s" % ("0x%X"%m,n," " * (30-len(n)), (dest.A2N[m]), c)
+            else:
+                if stub: print >> newnames_s, "NSTUB(%10s, %s)%s // %s" % ("0x%X"%m,n," " * (30-len(n)),c)
+                if idc: print >> newnames_idc, "    MakeName(%10s, %s)%s // %s" % ("0x%X"%m,n," " * (30-len(n)),c)
                     
         if idc: 
             print >> newnames_idc, "}"
