@@ -9,6 +9,16 @@ $funcname
 #if $sourcefile
     <h2>Source file: $sourcefile</h2>
 #end if
+
+<p>Command shortcuts (edit, copy & paste into ARM console):</p>
+<textarea rows="7" cols="80" spellcheck="false">
+dump = D[0] # adjust it if you've loaded more dumps
+dump.MakeName(0x$funcaddr, "$funcname")
+html.func_full(dump.Fun("$funcname"))
+html.update(dump)
+f = dump.Fun("$funcname")
+</textarea>
+<br>
 <div class="funcmenu">
 <ul>
 <li><a href="#disasm">Disassembly</a></li>
