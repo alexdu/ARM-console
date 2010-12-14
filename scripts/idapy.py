@@ -473,7 +473,8 @@ def filter_non_printable(str):
    
 def CodeRefsTo(ea,ghost=0):
     CR = []
-    if not callsAbortFunc(ea-4) and (ea-4) not in _d.STRMASK:
+    mne = GetMnem(ea-4)
+    if mne and not callsAbortFunc(ea-4) and (ea-4) not in _d.STRMASK:
         if (not ChangesPC(ea-4)) or (ChangesLR(ea-8)):
             CR.append(ea-4)
         else: # changes PC and it's not a call; if it's a conditional jump, skip it

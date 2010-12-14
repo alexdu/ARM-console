@@ -174,7 +174,7 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100):
                 print >> log, "new addr: 0x%x" % newAddr
                 #~ print "new addr: 0x%x" % newAddr
                 if isFuncStart(newAddr) or maybeFuncStart(newAddr):
-                    #~ print "Tail call: ", GetDisasmQ(ea)
+                    print >> log, "Tail call: ", GetDisasmQ(ea)
                     break
                 else:
                     if newAddr in cp_only(cpf):
@@ -210,6 +210,9 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100):
                     if m == "B":
                         newAddr = GetOperandValue(ea, 0)
                         print >> log, "new addr: %x" % newAddr
+                        if isFuncStart(newAddr) or maybeFuncStart(newAddr):
+                            print >> log, "Tail call: ", GetDisasmQ(ea)
+                            break
                         ea = newAddr
                         if newAddr in cp_only(cpf):
                             print >> log, "loop"
@@ -253,10 +256,10 @@ def cond_str(cf,condit):
         condit = STR(condit)
         if cf == "EQ": return "%s == 0" % condit
         elif cf == "NE": return "%s != 0" % condit
-        elif cf == "GT": return "%s > 0" % condit
-        elif cf == "LT": return "%s < 0" % condit
-        elif cf == "GE": return "%s >= 0" % condit
-        elif cf == "LE": return "%s <= 0" % condit
+        elif cf in ["GT", "NE_and_GT"]: return "%s > 0" % condit
+        elif cf in ["LT", "NE_and_LT"]: return "%s < 0" % condit
+        elif cf in ["GE", "NE_and_GE"]: return "%s >= 0" % condit
+        elif cf in ["LE", "NE_and_LE"]: return "%s <= 0" % condit
         
     if type(condit) == Add and len(condit.args) == 2:
         a = STR(condit.args[1])
@@ -268,10 +271,10 @@ def cond_str(cf,condit):
             mi = "%s == %s" % (ma,mb)
             return pl if len(pl) <= len(mi) else mi
         elif cf == "NE": return "%s != %s" % (a,b)
-        elif cf == "GT": return "%s < %s" % (a,b)
-        elif cf == "LT": return "%s > %s" % (a,b)
-        elif cf == "GE": return "%s <= %s" % (a,b)
-        elif cf == "LE": return "%s >= %s" % (a,b)
+        elif cf in ["GT", "NE_and_GT"]: return "%s < %s" % (a,b)
+        elif cf in ["LT", "NE_and_LT"]: return "%s > %s" % (a,b)
+        elif cf in ["GE", "NE_and_GE"]: return "%s <= %s" % (a,b)
+        elif cf in ["LE", "NE_and_LE"]: return "%s >= %s" % (a,b)
     
 # a single IF branch (or rung)
 class IFB(Function):

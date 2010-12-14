@@ -220,15 +220,14 @@ def disasm_html(dump, start, end, f=None):
                 arg3 = False
                 try:
                     mnef = items[2]
-                    assert mnef.startswith("add")
+                    assert mnef.startswith("add") or mnef.startswith("sub")
                     args = items[3].split(",")
                     b = args[1].strip()
                     c = args[2].strip()
                     assert b in ["r15", "pc"]
                     assert c[0] == "#"
                     off = int(c[1:])
-                    data = addr + off + 8
-                    items[3] = items[3].replace("r15","pc")
+                    data = addr + off + 8 if mnef.startswith("add") else addr - off + 8
                 except:
                     try:
                         data = int(items[4].split(" ")[1], 16)
@@ -425,7 +424,7 @@ def func_full(F):
         svgdata = sv.read()
         sv.close()
         #svgdata = re.sub("@([a-zA-Z0-9_]+)", '<a xlink:href="\\1.htm" style="fill: blue" xlink:show="new" target="_top">\\1</a>', svgdata)
-        for m in re.findall("@([a-zA-Z0-9_]+)", svgdata):
+        for m in re.findall("@([^\ \>]+)", svgdata):
             try:
                 fun = dump.Fun(m)
             except:
@@ -474,7 +473,7 @@ def func_update(F,quick=True):
         func_quick(F)
         if not quick: func_full(F)
 
-def full(D,q=True):
+def full(D,q=True,firstfunc=None):
     if type(D) != list: D = [D]
 
     try: auto(D)
@@ -492,6 +491,9 @@ def full(D,q=True):
             #~ continue
             progress(float(i) / len(dump.FUNCS))
             F = dump.Fun(a)
+            if firstfunc:
+                if F.name == firstfunc: firstfunc = False
+                else: continue
             func_full(F)
 
 #~ @profile
@@ -555,9 +557,10 @@ def tasks(D):
         ns['dumpname'] = dump.bin
 
         Funcs = []
-        C = bkt.trace_calls_to(["CreateTask","AJ_task_create_R0.name_R1.priority_R2.unk_R3.Sub_SP.taskStruct"],4)
+        names = ["task_create", "CreateTask","AJ_task_create_R0.name_R1.priority_R2.unk_R3.Sub_SP.taskStruct"]
+        C = bkt.trace_calls_to(names,4)
         extras = []
-        F = {'name': 'CreateTask'}
+        F = {'name': names}
         callers = []
         for a,c in C.iteritems():
             callers.append({'address': link2funcoff(dump, a), 'func': c[1], 'args': c[2]})
@@ -594,9 +597,10 @@ def semaphores(D):
         ns['dumpname'] = dump.bin
 
         Funcs = []
-        C = bkt.trace_calls_to(["CreateBinarySemaphore","TH_create_named_semaphore"],2)
+        names = ["CreateBinarySemaphore","TH_create_named_semaphore", "create_named_semaphore"]
+        C = bkt.trace_calls_to(names,2)
         extras = []
-        F = {'name': 'CreateBinarySemaphore'}
+        F = {'name': names}
         callers = []
         for a,c in C.iteritems():
             callers.append({'address': link2funcoff(dump, a), 'func': c[1], 'args': c[2]})
@@ -632,9 +636,10 @@ def msgqueues(D):
         ns['dumpname'] = dump.bin
 
         Funcs = []
-        C = bkt.trace_calls_to(["CreateMessageQueue","TH_msg_queue_receive"],2)
+        names = ["CreateMessageQueue","TH_msg_queue_receive", "msg_queue_receive"]
+        C = bkt.trace_calls_to(names,2)
         extras = []
-        F = {'name': 'CreateMessageQueue'}
+        F = {'name': names}
         callers = []
         for a,c in C.iteritems():
             callers.append({'address': link2funcoff(dump, a), 'func': c[1], 'args': c[2]})
@@ -663,13 +668,16 @@ def msgqueues(D):
         print >> f, Template(file="MsgQueues.tmpl", searchList=[ns])
         f.close()
 
+
 def auto(D):
     if type(D) != list: D = [D]
     for dump in D:
         select_dump(dump)
         srcguess.extrapolate(dump)
-    #~ for dump in D:
-        #~ guessfunc.run(dump)
+    for dump in D:
+        guessfunc.analyze_names(dump)
+        guessfunc.analyze_bx(dump)
+
     tasks(D)
     semaphores(D)
     msgqueues(D)
@@ -685,9 +693,10 @@ def properties(D):
         Props = defaultdict(list)
 
         Funcs = []
-        C = bkt.trace_calls_to(["prop_request_change","TH_prop_request_change"],3)
+        names = ["prop_request_change","TH_prop_request_change"]
+        C = bkt.trace_calls_to(names,3)
         extras = [["prop_register_slave", "TH_prop_register_slave"]]
-        F = {'name': 'prop_request_change'}
+        F = {'name': names}
         callers = []
         for a,c in C.iteritems():
             callers.append({'address': link2funcoff(dump, a), 'func': c[1], 'args': c[2]})
@@ -738,9 +747,10 @@ def eventprocs(D):
         ns['dumpname'] = dump.bin
 
         Funcs = []
-        C = bkt.trace_calls_to(["register_func","AJ_register_func"],3)
+        names = ["register_func","AJ_register_func"]
+        C = bkt.trace_calls_to(names,3)
         extras = [['call', 'TH_call']]
-        F = {'name': 'register_func'}
+        F = {'name': names}
         callers = []
         for a,c in C.iteritems():
             callers.append({'address': link2funcoff(dump, a), 'func': c[1], 'args': c[2]})

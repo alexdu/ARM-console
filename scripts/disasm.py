@@ -707,14 +707,14 @@ def friendly_disasm(dump,l):
     arg3 = False
     try:
         mnef = items[2].lower()
-        assert mnef.startswith("add")
+        assert mnef.startswith("add") or mnef.startswith("sub")
         args = items[3].split(",")
         b = args[1].strip().lower()
         c = args[2].strip().lower()
         assert b in ["r15", "pc"]
         assert c[0] == "#"
         off = int(c[1:])
-        data = addr + off + 8
+        data = addr + off + 8 if mnef.startswith("add") else addr - off + 8
     except:
         try:
             data = int(items[4].split(" ")[1], 16)
@@ -961,6 +961,9 @@ def find_funcs(dump,pattern,ratio=1,num=10):
                     return
 
 def tryMakeSub(d,v):
+    if v % 4 != 0:
+        print "Address %x not aligned, ignoring" % v
+        return
     if v in d.FUNCS:
         print "Function 0x%x: already defined." % v
     elif which_func(d,v):
@@ -995,6 +998,9 @@ static main() {
         if n not in dump.N2A:
             dele += 1
             print >> file, '    MakeName(%10s, ""); // old name: %s' % ("0x%X"%a, n)
+
+    for a,e in dump.FUNCS.iteritems():
+            print >> file, '    MakeFunction(0x%X, 0x%x);' % (a,e)
     
     print >> file, "}"
     file.close()
