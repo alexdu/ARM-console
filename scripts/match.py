@@ -53,10 +53,17 @@ def parse_stub(file):
     for l in f.readlines():
         m = re.match(restub, l)
         if m:
-            a = m.groups()[0].strip()
-            if a == "ROMBASEADDR": continue
-            addr = int(a, 16)
-            name = m.groups()[1].strip()
+            try:
+                a = m.groups()[0].strip()
+                if a == "ROMBASEADDR": continue
+                addr = int(a, 16)
+                name = m.groups()[1].strip()
+            except:
+                a = m.groups()[1].strip()
+                if a == "ROMBASEADDR": continue
+                addr = int(a, 16)
+                name = m.groups()[0].strip()
+            
             A2N[addr] = name
             N2A[name] = addr
         m = re.match(redef, l)
@@ -413,9 +420,12 @@ def CodeMatch(D):
         M[pair] = list(set(M1.get(pair,[]) + M2.get(pair,[])))
     M = remove_duplicate_matches(M)
     return M
+
+tree = None
 def CodeMatch_corasick(D):
     import ahocorasick
-
+    global tree
+    
     for d in D:
         d.addr2sigs, d.sigs2addr = create_codesigs(d)
     for d in D:
