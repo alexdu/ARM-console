@@ -91,8 +91,9 @@ def GetOpnd(ea,i):
     items = l.split("\t")
     if len(items) > 3:
         args = _regnames(items[3].replace(" ",""))
+        args = re.sub(",([ALR][SO][LR])", "`\\1", args) # trick to stick LSL to previous operand
         arglist = re.findall(r"(\([^\(\)]+\)|\[[^\[\]]+\]|\{[^\{\}]+\}|[^,]+)", args)
-        try: return arglist[i]
+        try: return arglist[i].replace("`",",")
         except: return ""
 
 def GetOpnds(ea):
@@ -124,6 +125,8 @@ def GetOpType(ea,i):
         v = int(opnd,16)
         return 5
     except: pass
+    if re.match(".*[ALR][SO][LR]", opnd): # LSL & friends
+        return 8
     if re.match('[A-Z]',opnd):
         return 1
     if opnd.startswith("["):
@@ -461,14 +464,7 @@ def maybeFuncStart(ea):
 
 
 def filter_non_printable(str):
-    """
-    >>> filter_non_printable("\x07buzz!")
-    'buzz!'
-    """
-    f = ''.join([c for c in str if ord(c) > 31 and ord(c) <= ord('z')])
-    while "  " in f:
-        f = f.replace("  ", " ")
-    return f
+    f = ''.join([c for c in str if ord(c) <= ord('z')])
 
    
 def CodeRefsTo(ea,ghost=0):
