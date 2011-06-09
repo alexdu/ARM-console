@@ -188,6 +188,14 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100):
             if IsReturn(ea):
                 print >> log, "RETURN at %x" % ea
                 break
+            if ChangesPC(ea):
+                print "Jumpy?"
+                for off in range(100):
+                    newAddr = ea + off * 4 + 8
+                    CP += find_code_paths(ea, newAddr, cpf, ["EQ%d" % off], None)
+                    if GetMnem(newAddr) != "B": break
+                return CP
+                    
         elif suffix in branchx:
             print >> log, "same suffix:", suffix, branches
             if flagsDirty: 
@@ -224,6 +232,13 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100):
                     if IsReturn(ea):
                         print >> log, "RETURN at %x" % ea
                         break
+                    if ChangesPC(ea):
+                        print "Jumpy?"
+                        for off in range(100):
+                            newAddr = ea + off * 4 + 8
+                            CP += find_code_paths(ea, newAddr, cpf, ["EQ%d" % off], None)
+                            if GetMnem(newAddr) != "B": break
+                        return CP
                 else:
                     print >> log, "opposite condition => skipping"
                     pass
@@ -271,10 +286,10 @@ def cond_str(cf,condit):
             mi = "%s == %s" % (ma,mb)
             return pl if len(pl) <= len(mi) else mi
         elif cf == "NE": return "%s != %s" % (a,b)
-        elif cf in ["GT", "NE_and_GT"]: return "%s < %s" % (a,b)
-        elif cf in ["LT", "NE_and_LT"]: return "%s > %s" % (a,b)
-        elif cf in ["GE", "NE_and_GE"]: return "%s <= %s" % (a,b)
-        elif cf in ["LE", "NE_and_LE"]: return "%s >= %s" % (a,b)
+        elif cf in ["GT", "NE_and_GT"]: return "%s > %s" % (a,b)
+        elif cf in ["LT", "NE_and_LT"]: return "%s < %s" % (a,b)
+        elif cf in ["GE", "NE_and_GE"]: return "%s >= %s" % (a,b)
+        elif cf in ["LE", "NE_and_LE"]: return "%s <= %s" % (a,b)
     
 # a single IF branch (or rung)
 class IFB(Function):
@@ -817,7 +832,11 @@ def mem(ea):
 
 
 def STOREMEM(addr, value):
-    addr, value = copy(addr), copy(value)
+    try: addr = copy(addr)
+    except: pass
+    try: value = copy(value)
+    except: value = Symbol("whoops_" + str(value))
+    
     try: addr = int(addr)
     except: pass
     ARM.MEMDIC[addr] = value
@@ -852,10 +871,13 @@ class MEM(Function):
             return "*(%s)" % str(cls.args[0])
 
 class LSL(Function): 
+    
     @classmethod
     def eval(cls, a, b):
-        return a * (2**b)
-        #pass
+        try: 
+            b = int(b)
+            return a * (2**b)
+        except: pass
         
     #~ def __str__(cls):
         #~ return "covrig"
@@ -863,10 +885,31 @@ class LSL(Function):
         #~ b = cls.args[1]
         #~ return "(%s << %s)" % (a,b)
 
-#class ASL(Function): pass # same as LSL
+class ASL(Function): # same as LSL
+    @classmethod
+    def eval(cls, a, b):
+        try: 
+            b = int(b)
+            return a * (2**b)
+        except: pass
+            
 
-class LSR(Function): pass
-class ASR(Function): pass
+class LSR(Function):
+    @classmethod
+    def eval(cls, a, b):
+        try: 
+            b = int(b)
+            return a / (2**b)
+        except: pass
+
+class ASR(Function):
+    @classmethod
+    def eval(cls, a, b):
+        try: 
+            b = int(b)
+            return a / (2**b)
+        except: pass
+
 class BIC(Function): pass
 class ROR(Function): pass
 class ROL(Function): pass
@@ -1113,13 +1156,18 @@ def emusym_code_path(cpf, codetree=False):
     unhandled = 0
     #~ print cpf
     lr_stored = 0
-    for elem in cpf:
+    for kcpf,elem in enumerate(cpf):
         clear_cache()
+        jumptable_offset = None
         if type(elem) == tuple:  # code path with branch info
             ea,f = elem
             ARM.currentBranchFlags = f
+            try: next_ea = cpf[kcpf+1][0]
+            except: next_ea = ea;
         else:                    # plain, simple code path (only addresses)
             ea = elem
+            try: next_ea = cpf[kcpf+1]
+            except: next_ea = ea;
             
         print >> log, GetDisasmQ(ea)
         
@@ -1182,8 +1230,15 @@ def emusym_code_path(cpf, codetree=False):
             
             if a == "ARM.PC":
                 print "jump table?"
-                if codetree: AddInstr(Symbol("! Changed PC register"))
-                break
+                if codetree: 
+                    if b == "ARM.PC":
+                        jumptable_offset = (next_ea - ea - 8) / 4;
+                        print "jump table! var=%s off=%s" % (eval(c), jumptable_offset)
+                        run("ARM.setFlags((" + c + ") / 4)")
+                    else:
+                        AddInstr(Symbol("! Changed PC register"))
+                        break
+                
 
         elif mne in ["CMP", "CMN", "TST", "TEQ"]:
             a,post = TranslateOperand(ea, 0, lhs=True)

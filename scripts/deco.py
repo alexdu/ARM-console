@@ -20,7 +20,7 @@ def inde(k):
     print " " * k,
     
 def merge_trees(a,b,k=0):
-    #~ print "merge:", a, b
+    #~ print "merge: [[[ %s ]]] <<< %s >>>" %(a, b)
     #~ print type(a), type(b)
     assert type(a) == type(b)
     if type(a) == SEQ:
@@ -36,7 +36,8 @@ def merge_trees(a,b,k=0):
         assert a.args[0] == b.args[0]
         return IFB(a.args[0], merge_trees(a.args[1], b.args[1], k+1), evaluate=False)
     elif type(a) == IF:
-        assert a.args[0] == b.args[0] # should be the same IF condition
+        #~ print "assert: [[[ %s ]]] <<< %s >>>" %(a, b)
+        #~ assert a.args[0] == b.args[0] # should be the same IF condition
         ba = a.args[1:]
         bb = b.args[1:]
         newB = []
@@ -133,12 +134,13 @@ def decompile(ea, CP=None, force=False, raw=False):
     print "\nmerging"
     mt = CT[0]
     for ct in CT[1:]:
+        print "*",
         mt = merge_trees(mt, ct)
     #~ print "merged"
 
     if raw: return mt
 
-    print "rebuilding"
+    print "\nrebuilding"
     T = []
     for flags in [(False,False), (True,False), (True,True)]:
         emusym.setSimpFlags(*flags)

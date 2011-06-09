@@ -139,7 +139,11 @@ def trace_calls_to(possible_names, numargs, append=False):
         #~ print "%x: called from %s" % (ref, GetFuncOffset(ref))
         f = func_call_addr(ref)
         if f:
-            calls[ref] = find_func_call(ref, numargs)
+            try:
+                calls[ref] = find_func_call(ref, numargs)
+            except:
+                print "whoops..."
+                pass
             #~ print calls[ref]
 
     tab = open("table.txt", ("a" if append else "w"))
