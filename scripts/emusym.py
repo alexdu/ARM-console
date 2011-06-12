@@ -1099,11 +1099,11 @@ def STR(x, pointsto=False):
         if s: 
             rs = repr(s).replace("|", "!")
             return '%s' % (rs)
-            return '/*%s*/ %s' % ("%X" % x, rs)
+            return '/*%s*/ %s' % (hex(x), rs)
         if abs(x0) < 10: return "%d" % x0                # for small numbers, return the decimal
         #if len(list("%d" % x).replace(0,"")) >= 3: return  "0x%X" % x  # if in decimal is a "dirty" number, return the hex
         #if len(list("%X" % x).replace(0,"")) == 1: return  "0x%X" % x # if it's a clean number in hex, like 0x100, 0x1000, 0x3000..
-        return "0x%x" % (x)
+        return "0x" + hex(x)
     except:
         comment = ""
         if pointsto and x in ARM.MEMDIC:

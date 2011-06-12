@@ -15,6 +15,7 @@ import inspect, os
 import emusym
 from emusym import *
 from sympy.core.cache import * 
+from idapy import *
 
 def inde(k):
     print " " * k,
@@ -135,6 +136,7 @@ def decompile(ea, CP=None, force=False, raw=False):
     mt = CT[0]
     for ct in CT[1:]:
         print "*",
+        sys.stdout.flush()
         mt = merge_trees(mt, ct)
     #~ print "merged"
 
