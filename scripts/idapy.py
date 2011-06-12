@@ -125,12 +125,12 @@ def GetOpType(ea,i):
         v = int(opnd,16)
         return 5
     except: pass
+    if opnd.startswith("["):
+        return 3
     if re.match(".*,[ALR][SO][LR]", opnd): # LSL & friends
         return 8
     if re.match('[A-Z]',opnd):
         return 1
-    if opnd.startswith("["):
-        return 3
     return 0
 
 def GetOperandValue(ea,i):
@@ -464,6 +464,7 @@ def maybeFuncStart(ea):
 
 def filter_non_printable(str):
     f = ''.join([c for c in str if ord(c) <= ord('z')])
+    return f
 
    
 def CodeRefsTo(ea,ghost=0):
