@@ -19,6 +19,7 @@ import idc
 import console, IPython
 import match
 import emusym
+import deco
 
 gui_enabled = False
 armelf = "arm-elf-"
@@ -864,10 +865,40 @@ def _magic_r(self, s):
     except: pass
     idapy._d.refs(s)
 
+def _magic_d(self, s):
+    """Decompile
+    
+    Examples: 
+    d FF066908
+    d gui_main_task
+    """
+    _ip = IPython.ipapi.get()
+    if idapy._d is None:
+        print "Please select a dump first. Example:"
+        print "sel t2i"
+        return
+    try:
+        a = int(s)
+    except:
+        try:
+            a = int(s,16)
+        except:
+            try:
+                a = eval(s, _ip.user_ns)
+            except:
+                try:
+                    a = eval(s.replace("FF", "0xFF").replace("ff", "0xff")) # fixme: a smarter regex
+                except:
+                    a = get_name(idapy._d, s)
+    a = (a//4)*4
+    print deco.decompile(a, force=1)
+
 IPython.ipapi.get().expose_magic("g", _magic_g)
 IPython.ipapi.get().expose_magic("s", _magic_s)
 IPython.ipapi.get().expose_magic("r", _magic_r)
 IPython.ipapi.get().expose_magic("sel", _magic_sel)
+IPython.ipapi.get().expose_magic("d", _magic_d)
+IPython.ipapi.get().expose_magic("dec", _magic_d)
 
 def find_refs(dump,value=None, func=None):
     """
@@ -966,8 +997,8 @@ def tryMakeSub(d,v):
         return
     if v in d.FUNCS:
         print "Function 0x%x: already defined." % v
-    elif which_func(d,v):
-        print "Address 0x%x belongs to function %s." % (v, funcname(d,which_func(d,v)))
+    #~ elif which_func(d,v):
+        #~ print "Address 0x%x belongs to function %s." % (v, funcname(d,which_func(d,v)))
     elif v:
         if v < d.minaddr or v > d.maxaddr:
             print "Function 0x%x is outside ROM => skipping" % v
