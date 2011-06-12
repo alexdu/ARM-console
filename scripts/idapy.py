@@ -125,7 +125,7 @@ def GetOpType(ea,i):
         v = int(opnd,16)
         return 5
     except: pass
-    if re.match(".*[ALR][SO][LR]", opnd): # LSL & friends
+    if re.match(".*,[ALR][SO][LR]", opnd): # LSL & friends
         return 8
     if re.match('[A-Z]',opnd):
         return 1
@@ -148,7 +148,7 @@ def GetOperandValue(ea,i):
     try: return int(opnd,16)
     except: pass
     if opnd.startswith("R"):
-        return int(opnd[1:])
+        return int(opnd[1:].split(",")[0])
     if opnd == "PC":
         return 15
     if opnd == "LR":
@@ -408,7 +408,7 @@ o_displ  =     4  # Memory Reg [Base Reg + Index Reg + Displacement] phrase+addr
 o_imm  =       5  # Immediate Value                      value
 o_far  =       6  # Immediate Far Address  (CODE)        addr
 o_near  =      7  # Immediate Near Address (CODE)        addr
-
+o_regshift =   8  # R1,LSL#5 or similar
 
 
 # http://wiki.python.org/moin/BitManipulation
@@ -447,7 +447,6 @@ def hex(x):
         return "%X" % x
     else:
         return "%X" % (0x100000000+x)
-
 
 def isFuncStart(ea):
     """
