@@ -204,9 +204,10 @@ FS["prop_register_slave"] = FSig(('property_list',ptr), ('count',int), ('prop_ha
 FS["FIO_CreateFile"] = FSig(('name',str), ret=int)
 FS["FIO_WriteFile"] = FSig(('handle',int), ('start_addr',ptr), ('length',int), ret=int)
 FS["FIO_CloseFile"] = FSig(('handle',int), ret=int)
-FS["call"] = FSig(('name',str), None, None, None, None, None, None, ret=void)
+FS["call"] = FSig(('name',str), None, None, ret=void)
 FS["LoadCalendarFromRTC"] = FSig(ptr, ret=void)
 FS["AllocateMemory"] = FSig(int, ret=ptr)
+FS["register_interrupt"] = FSig(None, None, None, None, ret=void)
 
 
 def getFuncSignature(ea):
