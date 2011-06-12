@@ -19,7 +19,7 @@ def RegReadsAndWrites(e, acc):
         t0 = GetOpType(e,0); v0 = GetOperandValue(e,0)
         t1 = GetOpType(e,1); v1 = GetOperandValue(e,1)
         
-        if t1 == o_reg:
+        if t1 in [o_reg, o_regshift]:
             if v1 <= 3: acc[v1] += "R"
         
         elif t1 == 8:
@@ -29,7 +29,7 @@ def RegReadsAndWrites(e, acc):
         elif t1 == o_imm: pass
         else: fail(e)
 
-        if t0 == o_reg:
+        if t0 in [o_reg, o_regshift]:
             if v0 <= 3: acc[v0] += "W"
             
         else: fail(e)
@@ -44,14 +44,14 @@ def RegReadsAndWrites(e, acc):
         elif t1 in [o_mem, o_imm, o_far, o_near]: pass
         else: fail(e)
         
-        if t0 == o_reg:
+        if t0 in [o_reg, o_regshift]:
             if v0 <= 3: acc[v0] += ("W" if mne == "LDR" else "R")
         else: fail(e)
 
     elif mne in ["ADR"]:
         t0 = GetOpType(e,0); v0 = GetOperandValue(e,0)
         
-        if t0 == o_reg:
+        if t0 in [o_reg, o_regshift]:
             if v0 <= 3: acc[v0] += "W"
         else: fail(e)
 
@@ -60,17 +60,17 @@ def RegReadsAndWrites(e, acc):
         t1 = GetOpType(e,1); v1 = GetOperandValue(e,1)
         t2 = GetOpType(e,2); v2 = GetOperandValue(e,2)
 
-        if t1 == o_reg:
+        if t1 in [o_reg, o_regshift]:
             if v1 <= 3: acc[v1] += "R"
         elif t1 == o_imm: pass
         else: fail(e)
 
-        if t2 == o_reg:
+        if t2 in [o_reg, o_regshift]:
             if v2 <= 3: acc[v2] += "R"
         elif t2 == o_imm: pass
         else: fail(e)
         
-        if t0 == o_reg:
+        if t0 in [o_reg, o_regshift]:
             if v0 <= 3: acc[v0] += "W"
         elif t0 == o_imm: pass
         else: fail(e)
@@ -79,12 +79,12 @@ def RegReadsAndWrites(e, acc):
         t0 = GetOpType(e,0); v0 = GetOperandValue(e,0)
         t1 = GetOpType(e,1); v1 = GetOperandValue(e,1)
 
-        if t0 == o_reg:
+        if t0 in [o_reg, o_regshift]:
             if v0 <= 3: acc[v0] += "R"
         elif t0 == o_imm: pass
         else: fail(e)
 
-        if t1 == o_reg:
+        if t1 in [o_reg, o_regshift]:
             if v1 <= 3: acc[v1] += "R"
         elif t1 == o_imm: pass
         else: fail(e)
