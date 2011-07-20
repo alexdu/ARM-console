@@ -208,6 +208,9 @@ FS["call"] = FSig(('name',str), None, None, ret=void)
 FS["LoadCalendarFromRTC"] = FSig(ptr, ret=void)
 FS["AllocateMemory"] = FSig(int, ret=ptr)
 FS["register_interrupt"] = FSig(None, None, None, None, ret=void)
+FS["cmpString"] = FSig(None, None, ret=int)
+FS["task_create"] = FSig(None, None, None, None, None, ret=void)
+FS["dma_addr_to_user_addr"] = FSig(int, ret=int)
 
 
 def getFuncSignature(ea):
