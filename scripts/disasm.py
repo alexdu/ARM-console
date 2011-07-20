@@ -20,6 +20,7 @@ import console, IPython
 import match
 import emusym
 import deco
+import shutil
 
 gui_enabled = False
 armelf = "arm-elf-"
@@ -121,6 +122,8 @@ class Dump(Bunch):
         dump._loadednames.update(n2a)
 
     def save_names(dump, file):
+        if os.path.isfile(file):
+            shutil.copyfile(file, file + '~')
         if is_idc(file):
             save_names_idc(dump, file)
         else:
@@ -139,6 +142,14 @@ class Dump(Bunch):
         else:
             save_names_subs(dump, file, na)
 
+    def check_integrity(dump):
+        for a,n in dump.A2N.iteritems():
+            if dump.N2A[n] != a:
+                print "mismatch:",a,n,dump.N2A[n]
+        for n,a in dump.N2A.iteritems():
+            if dump.A2N[a] != n:
+                print "mismatch:",n,a,dump.A2N[a]
+    
     def MakeName(dump,addr,name):
         if not name:
             try: name = dump.A2N[addr]
@@ -146,19 +157,24 @@ class Dump(Bunch):
                 print "No name is associated with %x." % addr
                 return
             print "Deleting name %x -> %s" % (addr, name)
-            try: del dump.A2N[dump.N2A[name]]
-            except KeyError: pass
+            del dump.A2N[dump.N2A[name]]
             del dump.N2A[name]
             return
         if name in dump.N2A or addr in dump.A2N:
             if name not in dump.N2A: oldname = dump.A2N[addr]
             else: oldname = name
-            print "Overwriting %x -> %s with %s" % (dump.N2A[oldname], oldname, name)
-            try: del dump.A2N[dump.N2A[oldname]]
-            except KeyError: pass
+            oldaddr = dump.N2A[oldname]
+            print "Overwriting %x -> %s with %x -> %s" % (oldaddr, oldname, addr, name)
+            if oldaddr != addr and addr in dump.A2N:
+                name_at_new_addr = dump.A2N[addr]
+                print "Warning: deleting %x -> %s" % (addr, name_at_new_addr)
+                del dump.A2N[addr]
+                del dump.N2A[name_at_new_addr]
+            del dump.A2N[oldaddr]
             del dump.N2A[oldname]
         dump.A2N[addr] = name
         dump.N2A[name] = addr
+        assert len(dump.A2N) == len(dump.N2A)
 
     def MakeFunction(dump,start,end=None,name=None):
         """
@@ -195,6 +211,23 @@ class Dump(Bunch):
         dump.REFLIST.append((addr,value))
         dump.A2REFS[addr].append(value)
         dump.REF2AS[value].append(addr)
+
+    # print information about new functions named
+    def named_percentage(d):
+        k = 0
+        A = []
+        named, unnamed = 0, 0
+        for f in d.FUNCS:
+            try: F = d.Fun(f)
+            except: continue
+            if F.name.startswith("sub_"):
+                unnamed += 1
+            else:
+                named += 1
+
+        print "# Total Functions Named:", named, "\n# Total Functions:", named + unnamed, "\n# Percentage Named:", 100 * named / (named + unnamed), "%"
+        print "################################################################"
+
 
 class Fun():
     """
@@ -571,8 +604,17 @@ def get_name(dump,name):
     if type(name) != str:
         return name
     
+    if name.startswith("sub_"):
+        try: return int(name[4:], 16)
+        except: pass
+    
     if name in dump.N2A:
         return dump.N2A[name]
+    
+    for n,a in sorted(dump.N2A.iteritems(), key = lambda x: x[1]):
+        if n.startswith(name + "."):
+            print "struct maybe: %s -> %s" % (n, name)
+            return a
     
     matches = difflib.get_close_matches(name, dump.N2A.keys(), 1, 0.7)
     if matches:
@@ -771,6 +813,13 @@ def show_disasm(dump, start, end=None):
 
     for a in range(start, end, 4):
         l = dump.DISASM.get(a)
+
+        if a in dump.FUNCS:
+            print "// Start of function: %s" % funcname(dump, a)
+
+        if a in dump.A2N:
+            print "NSTUB(0x%x, %s):" % (a, dump.A2N[a])
+
         if not l: 
             print "%x: <empty>" % a
             continue
@@ -778,13 +827,8 @@ def show_disasm(dump, start, end=None):
             items = l.split("\t")
             addr = int(items[0][:-1], 16)
             raw = int(items[1], 16)
-
-            if addr in dump.FUNCS:
-                print "// Start of function: %s" % funcname(dump, addr)
-
-            if addr in dump.A2N:
-                #~ print ""
-                print "NSTUB(%s, %x):" % (dump.A2N[addr], addr)
+            
+            assert addr == a
 
             l = friendly_disasm(dump,l)
             print l
@@ -806,6 +850,7 @@ def _magic_g(self, s):
     g ff340d40
     g bzero32
     """
+    s = s.strip()
     _ip = IPython.ipapi.get()
     if idapy._d is None:
         print "Please select a dump first. Example:"
@@ -825,7 +870,7 @@ def _magic_g(self, s):
                 except:
                     a = get_name(idapy._d, s)
     a = (a//4)*4
-    show_disasm(idapy._d, a, a+40)
+    show_disasm(idapy._d, a, a+80)
 
 def _magic_s(self, s):
     """Search for strings in the selected dump, using a regex.
@@ -891,7 +936,38 @@ def _magic_d(self, s):
                 except:
                     a = get_name(idapy._d, s)
     a = (a//4)*4
-    print deco.decompile(a, force=1)
+    print deco.P.doprint(deco.decompile(a, force=1))
+
+def _magic_n(self, args):
+    """Name an address in the firmware
+    
+    Examples: 
+    n FF066908 gui_main_task
+    n 0x2AA0 + 4 foobar
+    """
+    _ip = IPython.ipapi.get()
+    if idapy._d is None:
+        print "Please select a dump first. Example:"
+        print "sel t2i"
+        return
+    args = args.split(" ")
+    s,n = string.join(args[:-1], " "), args[-1]
+    
+    try:
+        a = int(s)
+    except:
+        try:
+            a = int(s,16)
+        except:
+            try:
+                a = eval(s, _ip.user_ns)
+            except:
+                try:
+                    a = eval(s.replace("FF", "0xFF").replace("ff", "0xff")) # fixme: a smarter regex
+                except:
+                    a = get_name(idapy._d, s)
+    print "NSTUB( 0x%X, %s )" % (a, n)
+    idapy._d.MakeName(a, n)
 
 IPython.ipapi.get().expose_magic("g", _magic_g)
 IPython.ipapi.get().expose_magic("s", _magic_s)
@@ -899,6 +975,8 @@ IPython.ipapi.get().expose_magic("r", _magic_r)
 IPython.ipapi.get().expose_magic("sel", _magic_sel)
 IPython.ipapi.get().expose_magic("d", _magic_d)
 IPython.ipapi.get().expose_magic("dec", _magic_d)
+IPython.ipapi.get().expose_magic("n", _magic_n)
+IPython.ipapi.get().expose_magic("name", _magic_n)
 
 def find_refs(dump,value=None, func=None):
     """
@@ -1066,6 +1144,65 @@ def is_idc(file):
     else:
         raise Exception, "Unrecognized extension: " + file
 
+def guess_struct(d, x, refmin=2, maxsize=1000):
+    candidates = {}
+    for a,v in d.ROM.iteritems():
+        if v <= x and v >= x-maxsize:
+            nrefs = len(find_refs(d, v))
+            if nrefs > refmin:
+                candidates[v] = nrefs
+    for c,n in sorted(candidates.iteritems(), key=lambda x: -x[1]):
+        print hex(c),"refs=%d" % n, "dif=%d" % (x-c)
+
+def reduce_aj_verbosity(d):
+    aj_0x1234_usefulname = r"a?AJ_0x[0-9a-fA-F]+_(.*)"
+    aj_0x1234_structname_0x12_to_0x34 = r"a?AJ_0x[0-9a-fA-F]+_(.*)_0x[0-9a-fA-F]+_to_0x[0-9a-fA-F]+$"
+    rep = []
+    for x,v in d.N2A.iteritems():
+        x = x.replace("__","_")
+        m = re.match(aj_0x1234_structname_0x12_to_0x34, x)
+        if m:
+            name = m.groups()[0]
+            if not name.endswith("_struct"):
+                name += "_struct"
+            rep.append((v,x,name))
+        else:
+            m = re.match(aj_0x1234_usefulname, x)
+            if m:
+                name = m.groups()[0]
+                rep.append((v,x,name))
+    pprint(rep)
+    for addr, oldname, newname in rep:
+        if newname == "related": newname = ""
+        d.MakeName(addr, newname)
+
+
+def remove_decompiled_names(d):
+    rep = []
+    for x,v in d.N2A.iteritems():
+        if ("*" in x) or ("(" in x):
+            rep.append((v,x,""))
+    pprint(rep)
+    for addr, oldname, newname in rep:
+        d.MakeName(addr, newname)
+
+def remove_names_starting_with(d, prefix):
+    rep = []
+    for x,v in d.N2A.iteritems():
+        if x.startswith(prefix):
+            rep.append((v,x,""))
+    pprint(rep)
+    for addr, oldname, newname in rep:
+        d.MakeName(addr, newname)
+
+def trim_names(d, maxlen):
+    rep = []
+    for x,v in d.N2A.iteritems():
+        if len(x) > maxlen:
+            rep.append((v,x,x[:maxlen]))
+    pprint(rep)
+    #~ for addr, oldname, newname in rep:
+        #~ d.MakeName(addr, newname)
 
 def prepare_test():
     asm = """

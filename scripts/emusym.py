@@ -19,8 +19,9 @@ from sympy.core.cache import *
 import re
 import funargs
 from funargs import void, ptr
+from sympy.printing.printer import Printer
+from sympy.printing.str import StrPrinter
 #from pprint >> log, import pprint
-
 
 log = open("emusym.log", "w")
 clog = open("emusym-c.log", "w")
@@ -62,7 +63,7 @@ BHMask = {'B': 0xFF, 'H': 0xFFFF}
 
 def GuessFunction(start):
     try: 
-        CP = find_code_paths(start,timeout=1)
+        CP = find_code_paths(start,timeout=5)
     except Exception: 
         print "time out"
         return
@@ -180,7 +181,7 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100):
                     if newAddr in cp_only(cpf):
                         print >> log, "loop"
                         print >> log, cp_only(cpf)
-                        cpf = cpf + [cpf[cp_only(cpf).index(ea)]]
+                        cpf = cpf + [cpf[cp_only(cpf).index(newAddr)]]
                         #~ print "loop"
                         break
                     ea = newAddr
@@ -193,7 +194,7 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100):
                 for off in range(100):
                     newAddr = ea + off * 4 + 8
                     CP += find_code_paths(ea, newAddr, cpf, ["EQ%d" % off], None)
-                    if GetMnem(newAddr) != "B": break
+                    if GetMnem(newAddr) not in ["B", "POP"]: break
                 return CP
                     
         elif suffix in branchx:
@@ -225,7 +226,7 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100):
                         if newAddr in cp_only(cpf):
                             print >> log, "loop"
                             print >> log, cp_only(cpf)
-                            cpf = cpf + [cpf[cp_only(cpf).index(ea)]]
+                            cpf = cpf + [cpf[cp_only(cpf).index(newAddr)]]
                             #print "loop"
                             break
                         continue
@@ -237,7 +238,7 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100):
                         for off in range(100):
                             newAddr = ea + off * 4 + 8
                             CP += find_code_paths(ea, newAddr, cpf, ["EQ%d" % off], None)
-                            if GetMnem(newAddr) != "B": break
+                            if GetMnem(newAddr) not in ["B", "POP"]: break
                         return CP
                 else:
                     print >> log, "opposite condition => skipping"
@@ -266,47 +267,63 @@ condit = ""
 def inden(x):
     return "    " + x.replace("\n", "\n    ")
 
-def cond_str(cf,condit):
+def cond_str(cf,condit,P):
     if condit.is_Atom or type(condit) == MEM:
-        condit = STR(condit)
+        condit = P.doprint(condit)
         if cf == "EQ": return "%s == 0" % condit
         elif cf == "NE": return "%s != 0" % condit
-        elif cf in ["GT", "NE_and_GT"]: return "%s > 0" % condit
-        elif cf in ["LT", "NE_and_LT"]: return "%s < 0" % condit
+        elif cf in ["GT", "HI", "NE_and_GT"]: return "%s > 0" % condit
+        elif cf in ["LT", "LS", "NE_and_LT"]: return "%s < 0" % condit
         elif cf in ["GE", "NE_and_GE"]: return "%s >= 0" % condit
         elif cf in ["LE", "NE_and_LE"]: return "%s <= 0" % condit
         
     if type(condit) == Add and len(condit.args) == 2:
-        a = STR(condit.args[1])
-        b = STR(-condit.args[0])
-        ma = STR(-condit.args[1])
-        mb = STR(condit.args[0])
+        a = P.doprint(condit.args[1])
+        b = P.doprint(-condit.args[0])
+        ma = P.doprint(-condit.args[1])
+        mb = P.doprint(condit.args[0])
+        #~ print a,b,ma,mb
         if cf == "EQ": 
             pl = "%s == %s" % (a,b)
             mi = "%s == %s" % (ma,mb)
-            return pl if len(pl) <= len(mi) else mi
+            return mi if a.startswith("-") and b.startswith("-") else pl
         elif cf == "NE": return "%s != %s" % (a,b)
-        elif cf in ["GT", "NE_and_GT"]: return "%s > %s" % (a,b)
-        elif cf in ["LT", "NE_and_LT"]: return "%s < %s" % (a,b)
+        elif cf in ["GT", "HI", "NE_and_GT"]: return "%s > %s" % (a,b)
+        elif cf in ["LT", "LS", "NE_and_LT"]: return "%s < %s" % (a,b)
         elif cf in ["GE", "NE_and_GE"]: return "%s >= %s" % (a,b)
         elif cf in ["LE", "NE_and_LE"]: return "%s <= %s" % (a,b)
+
+def cond_eval(cf,condit):
+    if condit.is_Atom:
+        try: condit = int(condit)
+        except: return
+        
+        if cf == "EQ": return condit == 0
+        elif cf == "NE": return condit != 0
+        elif cf in ["GT", "NE_and_GT"]: return condit > 0
+        elif cf in ["LT", "NE_and_LT"]: return condit < 0
+        elif cf in ["GE", "NE_and_GE"]: return condit >= 0
+        elif cf in ["LE", "NE_and_LE"]: return condit <= 0
+        
+    if type(condit) == Add and len(condit.args) == 2:
+        try:
+            a = int(condit.args[1])
+            b = int(-condit.args[0])
+            ma = int(-condit.args[1])
+            mb = int(condit.args[0])
+        except:
+            return
+        if cf == "EQ": 
+            return a == b
+        elif cf == "NE": return a != b
+        elif cf in ["GT", "NE_and_GT"]: return a > b
+        elif cf in ["LT", "NE_and_LT"]: return a < b
+        elif cf in ["GE", "NE_and_GE"]: return a >= b
+        elif cf in ["LE", "NE_and_LE"]: return a <= b
     
 # a single IF branch (or rung)
 class IFB(Function):
-    def __str__(self):
-        #~ if str(self.args[0]) == "TRUE":
-            #~ return "\n" + str(self.args[1])
-        #~ if str(self.args[0]) == "zELSE":
-            #~ return "else:\n%s" % (inden(str(self.args[1])))
-        cf = str(self.args[0])
-        #~ return "if %s:\n" % (cf)
-        if self.args[1].args: # if it does something... (branch not empy)
-            cs = cond_str(cf, condit)
-            if cs:
-                return "if %s:\n%s" % (cs, inden(str(self.args[1])))
-                
-            return "if %s(%s):\n%s" % (cf, str(condit), inden(str(self.args[1])))
-        return ""
+    pass
 
 def setSimpFlags(ret, ret_reverse):
     #~ global simp_ret, simp_ret_reverse
@@ -395,7 +412,7 @@ class IF(Function):
                     #~ lastb = b.args[1].args[-1]
                 #~ except IndexError:
                     #~ return
-                if lasta==lastb:
+                if P.doprint(lasta)==P.doprint(lastb):
                     #~ print "common last"
                     return SEQ(IF(test, IFB(a.args[0], SEQ(*a.args[1].args[:-1])),
                                     IFB(b.args[0], SEQ(*b.args[1].args[:-1]))),
@@ -408,7 +425,7 @@ class IF(Function):
                     firstb = b.args[1].args[0]
                 except IndexError:
                     return
-                if firsta==firstb:
+                if P.doprint(firsta)==P.doprint(firstb):
                     #~ print "common first"
                     return SEQ(firsta, 
                                IF(test, IFB(a.args[0], SEQ(*a.args[1].args[1:])),
@@ -416,30 +433,7 @@ class IF(Function):
                              )
 
 
-
-
-
-                
-    def __str__(self):
-        A = []
-        #A.append(str(self.args[0]))
-        global condit
-
-        args = copy(list(self.args[1:]))
-        #~ args.sort()
-
-        for a in args:
-            condit = self.args[0]
-            A.append(str(a))
-        return string.join(A, "\n")
-        
-
 class SEQ(Function):
-    def __str__(self):
-        A = []
-        for a in self.args:
-            A.append(str(a))
-        return string.join(A, "\n")
         
     @classmethod
     def eval(self, *args):
@@ -479,9 +473,166 @@ def RetName(funcaddr, calladdr, funcname=None):
     return retname
 
 class CALL(Function):
-    def __str__(self):
-        calladdr, funcaddr = self.args[0], self.args[1]
+    pass
+    
+class RETURN(Function):
+    pass
 
+class MEMWRITE(Function):
+    pass
+
+class MEMREAD(Function):
+    pass
+
+class REGWRITE(Function):
+    pass
+
+class JUMP(Function):
+    pass
+    
+class REGREAD(Function):
+    pass
+
+
+
+class DecoPrinter(StrPrinter):
+
+    def _print_Integer(self,expr):
+        return STR(expr)
+
+    def _print_int(self,expr):
+        return self._print_Integer(expr)
+        
+    def _print_long(self,expr):
+        return self._print_Integer(expr)
+    
+    def _ptr(self,expr):
+        addr = expr.args[0]
+        try: return "*0x%s" % hex(int(addr))
+        except: return "*(%s)" % self._print(addr)
+
+    def _get_struct_name(self, base):
+        return idapy._d.A2N.get(base, "struct_0x%x" % base).split(".")[0]
+    
+    def _get_struct_off_name(self, base, off):
+        if base+off in idapy._d.A2N:
+            structname = self._get_struct_name(base)
+            fieldname = idapy._d.A2N[base+off]
+            if fieldname.startswith(structname):
+                fieldname = fieldname[len(structname):]
+                fieldname = fieldname.strip("._")
+            return "." + fieldname + (" /*off_0x%s, 0x%s*/" % (hex(off), hex(base+off)))
+        else:
+            return ".off_0x" + hex(off) + (" /*0x%s*/" % hex(base+off))
+        
+    def _print_Add(self,expr):
+        if type(expr.args[1]) == STRUCTPTR:
+            try:
+                base = int(expr.args[1].args[0])
+                off = int(expr.args[0])
+                assert off > 0
+            except: return super(DecoPrinter,self)._print_Add(expr)
+            return "&(" + self._get_struct_name(base) + self._get_struct_off_name(base, off) + ")"
+        else:
+            return super(DecoPrinter,self)._print_Add(expr)
+
+    def _print_MEM(self,expr):
+        addr = expr.args[0]
+        if type(addr) == Add:
+            if type(addr.args[1]) in [STRUCTPTR, STRUCTPTR_MAYBE]:
+                try:
+                    base = int(addr.args[1].args[0])
+                    off = int(addr.args[0])
+                except: return self._ptr(expr)
+                return self._get_struct_name(base) + self._get_struct_off_name(base, off)
+            else:
+                try: 
+                    off = int(addr.args[0])
+                    assert off > 0
+                except: return self._ptr(expr)
+                struct = addr.args[1]
+                if struct.is_Atom:
+                    return ("%s->off_0x" % self._print(struct)) + hex(off)# + (" /*%s*/" % self._print(struct+off))
+                return ("(%s)->off_0x" % self._print(struct)) + hex(off)# + (" /*%s*/" % self._print(struct+off))
+                
+        if type(addr) == STRUCTPTR:
+            try: base = int(addr.args[0])
+            except: return self._ptr(expr)
+            off = 0
+            n = idapy._d.A2N.get(base, "struct_0x%x" % base)
+            return n + ("" if "."in n else ".off_0")
+        
+        return self._ptr(expr)
+
+    def _print_MEMWRITE(self, expr):
+        return "%s = %s" % (self._print_MEM(expr), self._print(expr.args[1]))
+
+    def _print_SEQ(self,expr):
+        A = []
+        for a in expr.args:
+            A.append(self._print(a))
+        return string.join(A, "\n")
+
+    def _print_IF(self,expr):
+        A = []
+        global condit
+        args = copy(list(expr.args[1:]))
+        for a in args:
+            condit = expr.args[0]
+            #~ print condit
+            A.append(self._print(a))
+        return string.join(A, "\n")
+
+    def _print_IFB(self,expr):
+        #~ if str(self.args[0]) == "TRUE":
+            #~ return "\n" + str(self.args[1])
+        #~ if str(self.args[0]) == "zELSE":
+            #~ return "else:\n%s" % (inden(str(self.args[1])))
+        cf = self._print(expr.args[0])
+        #~ return "if %s:\n" % (cf)
+        if expr.args[1].args: # if it does something... (branch not empy)
+            ce = cond_eval(cf, condit)
+            if ce is not None:
+                if not ce: return "(false)"
+                
+            cs = cond_str(cf, condit, self)
+            if cs:
+                return "if %s:\n%s" % (cs, inden(self._print(expr.args[1])))
+                
+            return "if %s(%s):\n%s" % (cf, self._print(condit), inden(self._print(expr.args[1])))
+        return ""
+
+    def _print_STRUCTx(self,expr):
+        addr = expr.args[0]
+        off = expr.args[1]
+        try: return idapy._d.A2N[int(addr)] + ".off_0x" + hex(off)
+        except:
+            return "STRUCT(%s+%s)" % (hex(int(addr)),hex(int(off)))
+            #~ except: return "STRUCT(%s)" % addr
+
+    def _print_STRUCTPTR(self,expr):
+        addr = expr.args[0]
+        prefix = "&" if addr < 0x40000000 else ""
+        try: return prefix + "%s" % idapy._d.A2N[int(addr)]
+        except: return str(expr)
+            #~ except: return "STRUCT(%s)" % addr
+
+    def _print_STRUCTPTR_MAYBE(self,expr):
+        try: return "0x" + hex(expr.args[0])
+        except: return self._print(expr.args[0])
+
+    def _print_AND(self,expr):
+        a = expr.args[0]
+        b = expr.args[1]
+        try: a = "0x%X" % ctypes.c_uint32(int(a)).value
+        except: a = self._print(a)
+
+        try: b = "0x%X" % ctypes.c_uint32(int(b)).value
+        except: b = self._print(b); # raise
+        return "(%s & %s)" % (a,b)
+
+    def _print_CALL(self,expr):
+        calladdr, funcaddr = expr.args[0], expr.args[1]
         funcname = None
         sig = funargs.FSig(None, None, None, None, ret=None)
         try: 
@@ -493,13 +644,15 @@ class CALL(Function):
         if funcname is None:
             funcname = GetName(funcaddr)
         if funcname is None:
-            funcname = "FUNC(%s)" % STR(funcaddr)
+            funcname = "FUNC(%s)" % self._print(funcaddr)
 
         retname = RetName(funcaddr, calladdr, funcname)
+
+        #~ print calladdr , funcaddr, funcname, retname
         
         call_line = funcname + "("
         for i,(name,typ) in enumerate(sig.args):
-            try: v = self.args[i+2]
+            try: v = expr.args[i+2]
             except: 
                 call_line += "..."
                 continue
@@ -518,12 +671,12 @@ class CALL(Function):
                 elif typ==int: call_line += "%d" % v
                 elif typ==hex: call_line += "0x" + hex(v)
                 elif typ==str: call_line += "%s" % repr(GetString(v))
-                elif typ==ptr: call_line += "&(%s)" % MEM(v)
+                elif typ==ptr: call_line += "&(%s)" % P.doprint(MEM(v))
             else:
                 if typ==ptr: 
-                    call_line += "&(%s)" % MEM(v)
+                    call_line += "&(%s)" % P.doprint(MEM(v))
                 else:
-                    call_line += STR(v)
+                    call_line += self._print(v)
             if i < len(sig.args)-1:
                 call_line += ", "
         call_line += ")"
@@ -534,25 +687,11 @@ class CALL(Function):
         if sig.ret != void:
             call_line += " => %s" % retname
         return call_line
-class RETURN(Function):
-    def __str__(self):
-        return "return " + STR(self.args[0])
 
-class MEMWRITE(Function):
-    def __str__(self):
-        return "*(%s) = %s" % (STR(self.args[0]), STR(self.args[1]))
+    def _print_RETURN(self, expr):
+        return "return " + self._print(expr.args[0])
 
-class MEMREAD(Function):
-    pass
-
-class REGWRITE(Function):
-    pass
-
-class JUMP(Function):
-    pass
-    
-class REGREAD(Function):
-    pass
+P = DecoPrinter()
 
 # code tree
 CTree = []
@@ -655,8 +794,8 @@ def create_graph(CP, filename="emusym.svg"):
             #W[(ea,eb)] = 1 if icp==0 else 0
             sa = '"%s"' % (GetDisasm(ea).replace('"', "''"))
             sb = '"%s"' % (GetDisasm(eb).replace('"', "''"))
-            if GetMnem(ea) == "B" and i < len(cp)-1: sa = '"%s"' % GetFirstWord(GetDisasm(ea))
-            if GetMnem(eb) == "B" and i < len(cp)-1: sb = '"%s"' % GetFirstWord(GetDisasm(eb))
+            if GetMnem(ea) == "B" and i < len(cp)-1: sa = '"%s %x"' % (GetFirstWord(GetDisasm(ea)), GetOperandValue(ea,0))
+            if GetMnem(eb) == "B" and i < len(cp)-1: sb = '"%s %x"' % (GetFirstWord(GetDisasm(eb)), GetOperandValue(eb,0))
             sa = filter_non_printable(sa).replace("{",r"\{").replace("}",r"\}")
             sb = filter_non_printable(sb).replace("{",r"\{").replace("}",r"\}")
 
@@ -767,6 +906,11 @@ class ARMState:
             self.R1 = Symbol('arg1')
             self.R2 = Symbol('arg2')
             self.R3 = Symbol('arg3')
+            self.MEMDIC[self.SP] = Symbol('arg4')
+            self.MEMDIC[self.SP+4] = Symbol('arg5')
+            self.MEMDIC[self.SP+8] = Symbol('arg6')
+            self.MEMDIC[self.SP+12] = Symbol('arg7')
+            self.MEMDIC[self.SP+16] = Symbol('arg8')
 
     
     def getR15(self):
@@ -826,10 +970,9 @@ def mem(ea):
     except:
         pass
     try:
-        return "MEM(0x%X)" % ea
+        return "MEMREAD(0x%X)" % ea
     except:
-        return "MEM(%s)" % ea
-
+        return "MEMREAD(%s)" % ea
 
 def STOREMEM(addr, value):
     try: addr = copy(addr)
@@ -839,7 +982,7 @@ def STOREMEM(addr, value):
     
     try: addr = int(addr)
     except: pass
-    ARM.MEMDIC[addr] = value
+    ARM.MEMDIC[addr] = value # volatile memory (to be an option)
     print >> log, "  * stored:", STR(value)
     print >> clog, "*(%s) = %s" % (addr, STR(value))
     #~ if "sp0" not in str(addr):
@@ -849,26 +992,30 @@ def ReadROM(ea):
     return idapy._d.ROM.get(ea)
 
 # pointer dereference operator... or memory acces
-class MEM(Function):
+# this one evaluates either to an abstract memory read (MEM) or to a concrete value/symbol
+class MEMREAD(Function):
     @classmethod
     def eval(cls, ea):
         ea = copy(ea)
-        #~ print "mem:", ea, ea in ARM.MEMDIC
         if ea in ARM.MEMDIC:
-            return ARM.MEMDIC[ea]
+            return copy(ARM.MEMDIC[ea])
         try:
             ea = int(ea)
             return Uint32(ea)
         except:
-            #~ print >> log, "err"
             pass
-        #return mem(addr)
-        #~ print >> log, "EVAL DONE"
-    def __str__(cls):  # fixme: infinite recursion hack
-        try: 
-            return "*(%s)" % STR(cls.args[0])
+        return MEM(ea)
+
+# this one only reads from ROM upon evaluation
+class MEM(Function):
+    @classmethod
+    def eval(cls, ea):
+        ea = copy(ea)
+        try:
+            ea = int(ea)
+            return Uint32(ea)
         except:
-            return "*(%s)" % str(cls.args[0])
+            pass
 
 class LSL(Function): 
     
@@ -938,19 +1085,20 @@ class AND(Function):
             return BYTE(a)
         if b == 0xFFFF:
             return HALFWORD(a)
-    def __str__(cls):
-        a = cls.args[0]
-        b = cls.args[1]
-        try: a = "0x%X" % ctypes.c_uint32(int(a)).value
-        except: a = str(a)
 
-        try: b = "0x%X" % ctypes.c_uint32(int(b)).value
-        except: b = str(b); # raise
-        return "(%s & %s)" % (a,b)
 class OR(Function):
     pass
 
 class XOR(Function):
+    pass
+
+class STRUCT(Function):
+    pass
+
+class STRUCTPTR(Function):
+    pass
+    
+class STRUCTPTR_MAYBE(Function): # could be unnamed struct or plain integer; if used in MEM(integer_off + struct_addr), it's considered a struct
     pass
 
 
@@ -1062,7 +1210,7 @@ def TranslateOperand(ea,i,lhs=False,dest=False):
     elif t == o_imm:
         return str(GetOperandValue(ea,i)), None
     elif t in [o_mem, o_far, o_near]:
-        return MEM(GetOperandValue(ea,i)), None
+        return MEMREAD(GetOperandValue(ea,i)), None
         
     elif t in [o_phrase, o_displ]:
         OpSeg(ea,i)
@@ -1070,7 +1218,7 @@ def TranslateOperand(ea,i,lhs=False,dest=False):
         addr = TranslatePhrase(m.groups()[0])
         post = TranslatePostindex(m.groups())
         #print >> log, "addr:", eval(addr), type(eval(addr))
-        return (addr if dest else "MEM(" + str(addr) + ")"), post
+        return (addr if dest else "MEMREAD(" + str(addr) + ")"), post
     elif t == 8: # MOV R2, R1, LSR#24
         return TranslatePhrase(GetOpnd(ea,i)), None
     elif t == None:
@@ -1093,6 +1241,9 @@ def STR(x, pointsto=False):
         fo = GetFuncOffset(x)
         if fn == fo: return "@" + fn
         
+        if x > 0x500 and x in idapy._d.A2N:
+            return idapy._d.A2N[x]
+        
         s = GetString(x)
         x0 = x
         x = ctypes.c_uint32(x).value
@@ -1100,10 +1251,20 @@ def STR(x, pointsto=False):
             rs = repr(s).replace("|", "!")
             return '%s' % (rs)
             return '/*%s*/ %s' % (hex(x), rs)
-        if abs(x0) < 10: return "%d" % x0                # for small numbers, return the decimal
+        #~ if abs(x0) < 10: return "%d" % x0                # for small numbers, return the decimal
         #if len(list("%d" % x).replace(0,"")) >= 3: return  "0x%X" % x  # if in decimal is a "dirty" number, return the hex
         #if len(list("%X" % x).replace(0,"")) == 1: return  "0x%X" % x # if it's a clean number in hex, like 0x100, 0x1000, 0x3000..
-        return "0x" + hex(x)
+        plushex = "0x" + hex(x)
+        minushex = ("0x%X" % ctypes.c_int32(x).value).replace("0x-", "-0x")
+        plusdec = str(ctypes.c_uint32(x).value)
+        minusdec = str(ctypes.c_int32(x).value)
+        candidates = [plusdec, plushex, minusdec, minushex]
+        #~ print candidates
+        cost = [0.5 * len(x) + len(set(x)) - (0.5 if "0" in x.replace("0x","") else 0) - (0.5 if x[-1] == "0" else 0) for x in candidates]
+        #~ print cost
+        for c,p in zip(candidates,cost):
+            if p == min(cost):
+                return c
     except:
         comment = ""
         if pointsto and x in ARM.MEMDIC:
@@ -1116,7 +1277,7 @@ def STR(x, pointsto=False):
 def print_stack():
     for k in range(100):
         if ARM.SP+k*4 in ARM.MEMDIC:
-            val = MEM(ARM.SP+k*4)
+            val = MEMREAD(ARM.SP+k*4)
             if val:
                 print >> log, "  * SP+0x%02x => %s" % (k*4, val)
 
@@ -1190,7 +1351,16 @@ def emusym_code_path(cpf, codetree=False):
             
             if mne == "MSR":
                 ARM.CPSR = Symbol("cpsr_%x" % ea)
-                
+            
+            if 'ARM.PC' in b and 'MEM' in b: # PC-relative indirect addressing: maybe a struct?
+                try:
+                    if eval(b) not in idapy._d.ROM and eval(b) > 0x1000 and eval(b) < 0x100000:
+                        if eval(b) in idapy._d.A2N:
+                            if not idapy._d.A2N[eval(b)].isupper(): # uppercase names are not structs
+                                b = "STRUCTPTR(%s)" % eval(b)
+                        else:
+                            b = "STRUCTPTR_MAYBE(%s)" % eval(b)
+                except: pass
             
             B,H = GetByteSuffix(ea), GetHalfwordSuffix(ea)
             if B or H:
@@ -1238,7 +1408,24 @@ def emusym_code_path(cpf, codetree=False):
                     else:
                         AddInstr(Symbol("! Changed PC register"))
                         break
-                
+
+        elif mne in ["MLA", "MLS"]:
+            a,post = TranslateOperand(ea, 0, dest=True)
+            b,post = TranslateOperand(ea, 1, lhs=True)
+            c,post = TranslateOperand(ea, 2)
+            d,post = TranslateOperand(ea, 3)
+    
+            add_or_sub = "+" if mne == "MLA" else "-"
+            run(a + " = (" + b + ") * (" + c + ")" + add_or_sub + "(" + d + ")")
+
+            if codetree: 
+                if not a.startswith("ARM.R") and not a.startswith("ARM.SP"):
+                    AddInstr(REGWRITE(a[4:], eval(a)))
+
+            if GetFlagSuffix(ea):
+                run("ARM.setFlags(" + a + ")")
+            if post: run(post)
+            print >> log, "  * %s = %s" % (a, STR(eval(a)))
 
         elif mne in ["CMP", "CMN", "TST", "TEQ"]:
             a,post = TranslateOperand(ea, 0, lhs=True)
@@ -1287,7 +1474,7 @@ def emusym_code_path(cpf, codetree=False):
             regs = ParseRegList(GetOpnd(ea,0))
             regs.reverse()
             for k,r in enumerate(regs):
-                run("ARM.%s = MEM(ARM.SP + %d)" % (r, (k)*4))
+                run("ARM.%s = MEMREAD(ARM.SP + %d)" % (r, (k)*4))
             for k,r in enumerate(regs):
                 print >> log, "  * ARM.%s = %s" % (r, eval("ARM.%s" % r))
             run("ARM.SP += %d" % (len(regs)*4))
@@ -1310,7 +1497,7 @@ def emusym_code_path(cpf, codetree=False):
             if rev:
                 regs.reverse()
             for k,r in enumerate(regs):
-                run("ARM.%s = MEM(ARM.%s %s %d)" % (r, src, sign, (k+pre)*4))
+                run("ARM.%s = MEMREAD(ARM.%s %s %d)" % (r, src, sign, (k+pre)*4))
             for k,r in enumerate(regs):
                 print >> log, "  * ARM.%s = %s" % (r, eval("ARM.%s" % r))
                 
@@ -1339,15 +1526,15 @@ def emusym_code_path(cpf, codetree=False):
                 dest,post = TranslateOperand(ea,0)
                 func = eval(dest)
                 
-                args = [ARM.R0, ARM.R1, ARM.R2, ARM.R3] + [ ARM.MEMDIC.get(ARM.SP+k, MEM(ARM.SP+k)) for k in range(0,13,4)]
+                args = [ARM.R0, ARM.R1, ARM.R2, ARM.R3] + [ ARM.MEMDIC.get(ARM.SP+k, MEMREAD(ARM.SP+k)) for k in range(0,13,4)]
                 if dest.startswith("ARM.R"):
                     args = args[:GetOperandValue(ea,0)]
                 if codetree:
-                    #~ print MEM(ARM.SP)
+                    #~ print MEMREAD(ARM.SP)
                     #~ print ARM.MEMDIC
                     #~ print copy(ARM.SP) in ARM.MEMDIC, ARM.MEMDIC.get(ARM.SP)
                     #~ print str(CALL(ea, func, *args))
-                    try: AddInstr(Symbol(str(CALL(ea, func, *args))))
+                    try: AddInstr(CALL(ea, func, *args))
                     except: 
                         AddInstr(Symbol("Buggy_CALL"))
                         raise
@@ -1371,15 +1558,16 @@ def emusym_code_path(cpf, codetree=False):
             dest,post = TranslateOperand(ea,0)
             func = eval(dest)
             
-            args = [ARM.R0, ARM.R1, ARM.R2, ARM.R3] + [ ARM.MEMDIC.get(ARM.SP+k, MEM(ARM.SP+k)) for k in range(0,13,4)]
+            args = [ARM.R0, ARM.R1, ARM.R2, ARM.R3] + [ ARM.MEMDIC.get(ARM.SP+k, MEMREAD(ARM.SP+k)) for k in range(0,13,4)]
             if dest.startswith("ARM.R"):
                 args = args[:GetOperandValue(ea,0)]
             if codetree:
-                #~ print MEM(ARM.SP)
+                #~ print MEMREAD(ARM.SP)
                 #~ print ARM.MEMDIC
                 #~ print copy(ARM.SP) in ARM.MEMDIC, ARM.MEMDIC.get(ARM.SP)
                 #~ print str(CALL(ea, func, *args))
-                try: AddInstr(Symbol(str(CALL(ea, func, *args))))
+                #~ try: AddInstr(Symbol(str(CALL(ea, func, *args))))
+                try: AddInstr(CALL(ea, func, *args))
                 except: 
                     AddInstr(Symbol("Buggy_CALL"))
                     raise
@@ -1390,7 +1578,7 @@ def emusym_code_path(cpf, codetree=False):
             dest,post = TranslateOperand(ea,0)
             func = eval(dest)            
             if codetree: 
-                try: AddInstr(CALL(ea, func, ARM.R0, ARM.R1, ARM.R2, ARM.R3, MEM(ARM.SP), MEM(ARM.SP+4), MEM(ARM.SP+8), MEM(ARM.SP+12)))
+                try: AddInstr(CALL(ea, func, ARM.R0, ARM.R1, ARM.R2, ARM.R3, MEMREAD(ARM.SP), MEMREAD(ARM.SP+4), MEMREAD(ARM.SP+8), MEMREAD(ARM.SP+12)))
                 except: 
                     AddInstr(Symbol("Buggy_CALL"))
                     raise
@@ -1402,15 +1590,16 @@ def emusym_code_path(cpf, codetree=False):
             if lr_stored:
                 dest,post = TranslateOperand(ea,0)
                 func = eval(dest)
-                args = [ARM.R0, ARM.R1, ARM.R2, ARM.R3] + [ MEM(ARM.SP+k) for k in range(0,13,4)]
+                args = [ARM.R0, ARM.R1, ARM.R2, ARM.R3] + [ MEMREAD(ARM.SP+k) for k in range(0,13,4)]
                 if dest.startswith("ARM.R"):
                     args = args[:GetOperandValue(ea,0)]
                 if codetree:
-                    #~ print MEM(ARM.SP)
+                    #~ print MEMREAD(ARM.SP)
                     #~ print ARM.MEMDIC
                     #~ print copy(ARM.SP) in ARM.MEMDIC, ARM.MEMDIC.get(ARM.SP)
                     #~ print str(CALL(ea, func, *args))
-                    try: AddInstr(Symbol(str(CALL(ea, func, *args))))
+                    #~ try: AddInstr(Symbol(str(CALL(ea, func, *args))))
+                    try: AddInstr(CALL(ea, func, *args))
                     except: 
                         AddInstr(Symbol("Buggy_CALL"))
                         raise
@@ -1458,5 +1647,7 @@ def emusym_code_path(cpf, codetree=False):
     clog.flush()
     
     if codetree:
+        #~ print CTree
         st = make_symbolic_tree(CTree)
+        #~ print st
         return copy(st)

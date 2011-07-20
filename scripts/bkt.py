@@ -115,7 +115,9 @@ def func_call_name(ea):
 def find_func_call(ea, numargs):
     allregs = ["ARM.R0", "ARM.R1", "ARM.R2", "ARM.R3"] + [ "MEM(ARM.SP+%d)"%k for k in range(0,13,4)]
     regs = back_solve(ea, allregs[:numargs])
-    Regs = [STR(r, pointsto=True) for r in regs]
+    #~ Regs = [STR(r, pointsto=True) for r in regs]
+    P = DecoPrinter()
+    Regs = [P.doprint(r) for r in regs]
     #~ pprintpprint(ARM.MEMDIC)
     return func_call_addr(ea), func_call_name(ea), "(" + string.join(Regs, ", ") + ")", Regs
 

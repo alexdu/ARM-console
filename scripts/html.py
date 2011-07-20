@@ -290,6 +290,7 @@ def disasm_html(dump, start, end, f=None):
 def table(dump, template, dinosaur):
     cache = {}
     for lis,fn,fi,var in dinosaur:
+        print var
         items = []
         for F in lis:
             item = {}
@@ -332,11 +333,17 @@ def name_index(dump):
 def func_index(dump):
     print "Creating function index..."
     Fn  = [dump.Fun(a) for a in sorted(dump.FUNCS.keys(), key=lambda x: dump.Fun(x).name.lower())]
+    print len(Fn)
     Fa  = [dump.Fun(a) for a in sorted(dump.FUNCS.keys())]
+    print len(Fa)
     Fs  = [dump.Fun(a) for a in sorted(dump.FUNCS.keys(), key=lambda x: -dump.Fun(x).size)]
+    print len(Fs)
     Fcf = [dump.Fun(a) for a in sorted(dump.FUNCS.keys(), key=lambda x: -len(filter(lambda av: av[1] in dump.FUNCS, find_refs(dump, None, x))))]
+    print len(Fcf)
     Fct = [dump.Fun(a) for a in sorted(dump.FUNCS.keys(), key=lambda x: -len(find_refs(dump, x)))]
+    print len(Fct)
     Fsf = [dump.Fun(a) for a in sorted(dump.FUNCS.keys(), key=lambda x: srcguess.sourcefile(dump, x) or "~")]
+    print len(Fsf)
 
     dinosaur = [(Fn, "functions-by-name.htm", lambda f: link2func(f), 'name'),
                 (Fa, "functions-by-addr.htm", lambda f: link2addr(f.addr), "address"),
@@ -408,14 +415,14 @@ def func_full(F):
         print "code paths..."
         CP = es.find_code_paths(F.addr, timeout=10)
 
-        if len(CP) < 50:
+        if len(CP) < 2000:
             try:
                 print "decompiling..."
-                ns['decompiled'] = str(deco.decompile(F.addr, CP))
+                ns['decompiled'] = deco.P.doprint(deco.decompile(F.addr, CP))
             except:
                 ns['decompiled'] = "whoops..."
         else:
-            ns['decompiled'] = "too many code paths (%d, limit=50)" % len(CP)
+            ns['decompiled'] = "too many code paths (%d, limit=2000)" % len(CP)
             
         svg = change_ext(funcfile(F), ".svg")
         svgf = os.path.join(change_ext(dump.bin,""), svg)
@@ -532,6 +539,7 @@ def quick(D):
             #~ continue
             progress(float(i) / len(dump.FUNCS))
             F = dump.Fun(a)
+            if F.size > 100000: dump.MakeFunction(F.addr, F.addr + 100000)
             func_quick(F)
 
 
@@ -695,7 +703,7 @@ def properties(D):
         Funcs = []
         names = ["prop_request_change","TH_prop_request_change"]
         C = bkt.trace_calls_to(names,3)
-        extras = [["prop_register_slave", "TH_prop_register_slave"]]
+        extras = [["prop_register_slave", "TH_prop_register_slave"], ["prop_get_value"], ["prop_deliver"]]
         F = {'name': names}
         callers = []
         for a,c in C.iteritems():

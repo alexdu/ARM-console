@@ -15,7 +15,7 @@ def analyze_push(d):
     for a in range(d.minaddr, d.maxaddr, 4):
         progress(float(a - d.minaddr) / (d.maxaddr - d.minaddr))
         if GetMnem(a) == "PUSH":
-            #~ print hex(a),GetDisasm(a)
+            print hex(a),GetDisasm(a)
             tryMakeSub(d,a)
 
 def analyze_bl(d):

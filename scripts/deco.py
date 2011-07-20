@@ -17,6 +17,9 @@ from emusym import *
 from sympy.core.cache import * 
 from idapy import *
 
+P = DecoPrinter()
+
+
 def inde(k):
     print " " * k,
     
@@ -139,6 +142,7 @@ def decompile(ea, CP=None, force=False, raw=False):
         sys.stdout.flush()
         mt = merge_trees(mt, ct)
     #~ print "merged"
+    #~ print mt
 
     if raw: return mt
 
@@ -152,7 +156,10 @@ def decompile(ea, CP=None, force=False, raw=False):
         for t in T:
             emusym.setSimpFlags(*flags)
             T2.append(rebuild_tree(t))
-    T2.sort(key=lambda x: len(str(x)))
+    #~ print [len(str(i)) for i in T]
+    #~ print [len(str(i)) for i in T2]
+    #~ print [len(P.doprint(i)) for i in T2]
+    T2.sort(key=lambda x: len(P.doprint(x)))
     mt = T2[0]
     #~ print "rebuilt", len(str(mt))
     #~ print mt
