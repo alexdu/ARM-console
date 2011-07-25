@@ -13,7 +13,7 @@ $funcname
 <p>Command shortcuts (edit, copy & paste into ARM console):</p>
 <textarea rows="7" cols="80" spellcheck="false">
 dump = D[0] # adjust it if you've loaded more dumps
-dump.MakeName(0x$funcaddr, "$funcname")
+n $funcaddr $funcname
 html.func_full(dump.Fun(0x$funcaddr))
 html.update(dump)
 f = dump.Fun(0x$funcaddr)

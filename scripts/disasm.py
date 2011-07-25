@@ -21,6 +21,8 @@ import match
 import emusym
 import deco
 import shutil
+import bkt
+import srcguess
 
 gui_enabled = False
 armelf = "arm-elf-"
@@ -83,7 +85,7 @@ class Dump(Bunch):
             if re.search(pattern, s, re.IGNORECASE):
                 matches.append(a)
         for a in matches:
-            print "String references to %x %s:" % (a,repr(self.STRINGS[a]))
+            print "\nString references to %x %s:" % (a,repr(self.STRINGS[a]))
             self.refs(a, gui=False)
 
     def disasm(self, start, end=None):
@@ -228,6 +230,17 @@ class Dump(Bunch):
         print "# Total Functions Named:", named, "\n# Total Functions:", named + unnamed, "\n# Percentage Named:", 100 * named / (named + unnamed), "%"
         print "################################################################"
 
+    def update_func_indexes(dump):
+        print "updating function indexes (FUNCENDS and WHICHFUNC)...",
+        dump.FUNCENDS.clear()
+        dump.WHICHFUNC.clear()
+        for f,e in dump.FUNCS.iteritems():
+            n = funcname(dump,f)
+            for a in range(f,e-3):
+                dump.WHICHFUNC[a] = f
+        for f,e in dump.FUNCS.iteritems():
+            dump.FUNCENDS[e] = f
+        print "ok."
 
 class Fun():
     """
@@ -347,11 +360,12 @@ def check_elf():
 def disasm_work(bin, addr):
     check_elf()
     print "Disassembling %s <%x>..." % (bin, addr),  ; sys.stdout.flush()
-    subprocess.check_call(shlex.split("%s --change-addresses=0x%x -I binary -O elf32-littlearm -B arm \"%s\" tmp.elf" % (objcopy, addr, bin)))
-    subprocess.check_call(shlex.split("%s --set-section-flags .data=code tmp.elf" % objcopy))
-    p = subprocess.Popen(shlex.split("%s -d tmp.elf -M reg-names-raw" % objdump), stdout=subprocess.PIPE)
+    tmp = change_ext(bin, ".elf")
+    subprocess.check_call(shlex.split("%s --change-addresses=0x%x -I binary -O elf32-littlearm -B arm \"%s\" \"%s\"" % (objcopy, addr, bin, tmp)))
+    subprocess.check_call(shlex.split("%s --set-section-flags .data=code \"%s\"" % (objcopy, tmp)))
+    p = subprocess.Popen(shlex.split("%s -d \"%s\" -M reg-names-raw" % (objdump, tmp)), stdout=subprocess.PIPE)
     dasm = p.communicate()[0]
-    os.remove("tmp.elf")
+    os.remove(tmp)
     print "ok"
     return dasm
 
@@ -493,10 +507,13 @@ def funcoff(dump, a):
     'ROMBASE+0x123'
     """
     
-    if a in dump.WHICHFUNC:
-        f = dump.WHICHFUNC[a]
+    try:
+        f = which_func(dump, a)
         return "%s+%d" % (funcname(dump,f),a-f)
-    return "ROMBASE+%s" % hex(int(a - dump.loadaddr))
+    except:
+        return "ROMBASE+%s" % hex(int(a - dump.loadaddr))
+    #~ if a in dump.WHICHFUNC:
+        #~ f = dump.WHICHFUNC[a]
 
 
 def funcname(dump, addr):
@@ -670,13 +687,8 @@ def load_dumps(regex=""):
 
     for b,i in idcs.iteritems(): # this needs cleanup
         D[b].A2N, D[b].N2A, D[b].FUNCS = cache.access(i, idc.parse)
+        D[b].update_func_indexes()
 
-        for f,e in D[b].FUNCS.iteritems():
-            n = funcname(D[b],f)
-            for a in range(f,e-3):
-                D[b].WHICHFUNC[a] = f
-        for f,e in D[b].FUNCS.iteritems():
-            D[b].FUNCENDS[e] = f
 
     for b,a in loadaddrs.iteritems():
         D[b]._loadednames = {}
@@ -687,21 +699,16 @@ def load_dumps(regex=""):
         D[b].REFLIST = list(refs.iteritems())
         D[b].A2REFS, D[b].REF2AS = cache.access(b, lambda b: index_refs(refs, D[b].ROM))
         
-        dele = 0
-        for name, addr in list(D[b].N2A.iteritems()):
-            if len(name) >=2 and name[0] == 'a' and GuessString(D[b], addr):
-                del D[b].N2A[name]
-                del D[b].A2N[addr]
-                dele += 1
-        if dele: print "%s: deleted %d auto-generated string names." % (b, dele)
-
     for b,a in loadaddrs.iteritems():
         D[b].STRINGS # compute them
+        remove_autogen_string_names(D[b])
+
     cache.save()
     
     if len(D) == 1:
         print "Auto-selecting dump %s" % D[bins[0]].bin
         idapy.select_dump(D[bins[0]])
+
     return sorted(D.values(), key=lambda x: x.bin)
 
 def guess_data(dump,value,allow_pointer=True):
@@ -739,7 +746,15 @@ def which_func(dump, a):
     >>> which_func(d, 0xff000008)
     4278190080L
     """
+
+    if not dump.FUNCS:
+        print "which_func: no functions defined; load an IDC or try with guessfunc.run(dump)"
+        return
+
     return dump.WHICHFUNC.get(a)
+
+    #~ try: return max(filter(lambda x: x <= a, dump.FUNCS.keys()))
+    #~ except: return
 
 def friendly_disasm(dump,l):
     if l is None: return ""
@@ -843,19 +858,11 @@ def show_disasm(dump, start, end=None):
                     s = GuessString(dump, addr+i)
                     print "%x:\tSTRING:  \t %s" % (addr, repr(s))
 
-def _magic_g(self, s):
-    """Go to a ROM address or function name.
-    
-    Examples: 
-    g ff340d40
-    g bzero32
-    """
+def addr_from_magic_string(s, rounded_32bit = True):
     s = s.strip()
+    s = s.strip(":")
     _ip = IPython.ipapi.get()
-    if idapy._d is None:
-        print "Please select a dump first. Example:"
-        print "sel t2i"
-        return
+
     try:
         a = int(s)
     except:
@@ -866,10 +873,44 @@ def _magic_g(self, s):
                 a = eval(s, _ip.user_ns)
             except:
                 try:
-                    a = eval(s.replace("FF", "0xFF").replace("ff", "0xff")) # fixme: a smarter regex
+                    #~ a = eval(s.replace("FF", "0xFF").replace("ff", "0xff")) # fixme: a smarter regex
+                    a = eval("0x" + s, _ip.user_ns)
                 except:
                     a = get_name(idapy._d, s)
-    a = (a//4)*4
+    if rounded_32bit:
+        a = (a//4)*4
+    return a
+
+def _magic_g(self, s):
+    """Go to a ROM address or function name.
+    
+    Examples: 
+    g ff340d40
+    g bzero32
+    """
+    s = s.strip()
+    if idapy._d is None:
+        print "Please select a dump first. Example:"
+        print "sel t2i"
+        return
+    a = addr_from_magic_string(s)
+    show_disasm(idapy._d, a, a+80)
+
+def _magic_f(self, s):
+    """Go to the function containing some ROM address or name.
+    
+    Examples: 
+    g ff340d40
+    g bzero32
+    """
+    s = s.strip()
+    if idapy._d is None:
+        print "Please select a dump first. Example:"
+        print "sel t2i"
+        return
+    a = addr_from_magic_string(s)
+    while not idapy.isFuncStart(a) and not idapy.maybeFuncStart(a):
+        a -= 4
     show_disasm(idapy._d, a, a+80)
 
 def _magic_s(self, s):
@@ -884,6 +925,19 @@ def _magic_s(self, s):
         print "sel t2i"
         return
     idapy._d.strings(s)
+
+def _magic_S(self, s):
+    """Search for string references in the selected dump, using a regex.
+    
+    Examples:
+    S canon
+    S japan
+    """
+    if idapy._d is None:
+        print "Please select a dump first. Example:"
+        print "sel t2i"
+        return
+    idapy._d.strrefs(s)
 
 def _magic_sel(self, s):
     """Select a dump. It will be used in IDAPython compatibility layer and in magic commands which operate on the selected dump.
@@ -906,9 +960,8 @@ def _magic_r(self, s):
         print "Please select a dump first. Example:"
         print "sel t2i"
         return
-    try: s = eval(s, globals(), locals())
-    except: pass
-    idapy._d.refs(s)
+    a = addr_from_magic_string(s)
+    idapy._d.refs(a)
 
 def _magic_d(self, s):
     """Decompile
@@ -917,26 +970,25 @@ def _magic_d(self, s):
     d FF066908
     d gui_main_task
     """
-    _ip = IPython.ipapi.get()
     if idapy._d is None:
         print "Please select a dump first. Example:"
         print "sel t2i"
         return
-    try:
-        a = int(s)
-    except:
-        try:
-            a = int(s,16)
-        except:
-            try:
-                a = eval(s, _ip.user_ns)
-            except:
-                try:
-                    a = eval(s.replace("FF", "0xFF").replace("ff", "0xff")) # fixme: a smarter regex
-                except:
-                    a = get_name(idapy._d, s)
-    a = (a//4)*4
+    a = addr_from_magic_string(s)
     print deco.P.doprint(deco.decompile(a, force=1))
+
+def _magic_bd(self, s):
+    """Backwards decompilation
+    
+    Examples: 
+    d FF0669F4
+    """
+    if idapy._d is None:
+        print "Please select a dump first. Example:"
+        print "sel t2i"
+        return
+    a = addr_from_magic_string(s)
+    bkt.back_deco(a)
 
 def _magic_n(self, args):
     """Name an address in the firmware
@@ -945,7 +997,6 @@ def _magic_n(self, args):
     n FF066908 gui_main_task
     n 0x2AA0 + 4 foobar
     """
-    _ip = IPython.ipapi.get()
     if idapy._d is None:
         print "Please select a dump first. Example:"
         print "sel t2i"
@@ -953,28 +1004,22 @@ def _magic_n(self, args):
     args = args.split(" ")
     s,n = string.join(args[:-1], " "), args[-1]
     
-    try:
-        a = int(s)
-    except:
-        try:
-            a = int(s,16)
-        except:
-            try:
-                a = eval(s, _ip.user_ns)
-            except:
-                try:
-                    a = eval(s.replace("FF", "0xFF").replace("ff", "0xff")) # fixme: a smarter regex
-                except:
-                    a = get_name(idapy._d, s)
+    a = addr_from_magic_string(s, rounded_32bit = False)
     print "NSTUB( 0x%X, %s )" % (a, n)
     idapy._d.MakeName(a, n)
 
 IPython.ipapi.get().expose_magic("g", _magic_g)
+IPython.ipapi.get().expose_magic("go", _magic_g)
+IPython.ipapi.get().expose_magic("f", _magic_f)
+IPython.ipapi.get().expose_magic("fun", _magic_f)
 IPython.ipapi.get().expose_magic("s", _magic_s)
+IPython.ipapi.get().expose_magic("S", _magic_S)
+IPython.ipapi.get().expose_magic("rs", _magic_S)
 IPython.ipapi.get().expose_magic("r", _magic_r)
 IPython.ipapi.get().expose_magic("sel", _magic_sel)
 IPython.ipapi.get().expose_magic("d", _magic_d)
 IPython.ipapi.get().expose_magic("dec", _magic_d)
+IPython.ipapi.get().expose_magic("bd", _magic_bd)
 IPython.ipapi.get().expose_magic("n", _magic_n)
 IPython.ipapi.get().expose_magic("name", _magic_n)
 
@@ -1103,10 +1148,10 @@ static main() {
         print >> file, '    MakeName(%10s, "%s");' % ("0x%X"%a,n)
 
     dele = 0
-    for n,a in dump._loadednames.iteritems():
-        if n not in dump.N2A:
-            dele += 1
-            print >> file, '    MakeName(%10s, ""); // old name: %s' % ("0x%X"%a, n)
+    #~ for n,a in dump._loadednames.iteritems():
+        #~ if n not in dump.N2A:
+            #~ dele += 1
+            #~ print >> file, '    MakeName(%10s, ""); // old name: %s' % ("0x%X"%a, n)
 
     for a,e in dump.FUNCS.iteritems():
             print >> file, '    MakeFunction(0x%X, 0x%x);' % (a,e)
@@ -1194,6 +1239,16 @@ def remove_names_starting_with(d, prefix):
     pprint(rep)
     for addr, oldname, newname in rep:
         d.MakeName(addr, newname)
+
+def remove_autogen_string_names(d):
+    dele = 0
+    for name, addr in list(d.N2A.iteritems()):
+        if len(name) >=2 and name[0] == 'a' and addr in d.STRMASK:
+            del d.N2A[name]
+            del d.A2N[addr]
+            dele += 1
+    if dele: print "%s: deleted %d auto-generated string names." % (d.bin, dele)
+
 
 def trim_names(d, maxlen):
     rep = []

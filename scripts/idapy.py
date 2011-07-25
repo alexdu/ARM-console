@@ -12,6 +12,10 @@ import string,re
 import disasm
 import cache
 
+# push and others allowed before it
+# repr(list(set([GetMnef(a) for a in d.FUNCS]))), then manual cleanup
+instructions_allowed_for_func_start = ['CMN', 'ORRS', 'SUB', 'STMIB', 'LDMIB', 'EOR', 'TST', 'MOVS', 'CMP', 'ASR', 'ASRS', 'LSL', 'BIC', 'LDM', 'LDR', 'LSR', 'PUSH', 'ANDS', 'STMIA', 'LDRSH', 'SUBS', 'STM', 'MRS', 'LDRB', 'ADD', 'STR', 'LDRH', 'MVN', 'AND', 'RSBS', 'ORR', 'MOV', 'RSB', 'STRB']
+
 def GetFirstWord(s):
     """
     >>> GetFirstWord("abc def")
@@ -28,7 +32,8 @@ def select_dump(dump):
 
 def GetDisasmQ(ea):
     """faster GetDisasm"""
-    return string.join(_d.DISASM.get(ea).split("\t")[2:], "   ")
+    try: return string.join(_d.DISASM.get(ea).split("\t")[2:], "   ")
+    except: return "undefined?"
 
 def GetDisasm(ea):
     """
@@ -71,6 +76,19 @@ def GetMnem_w(ea):
             if mne in ["BLEQ"]: return "BL"
             return mne
         except AttributeError: return
+
+# faster than GetMnem
+def IsBL(ea):
+    l = _d.DISASM.get(ea,"").upper()
+    items = l.split("\t")
+    if len(items) > 2:
+        mnef = items[2]
+        if mnef.startswith("BL"):
+            if mnef in ["BLE", "BLT", "BLS"]: return 0
+            if mnef.startswith("BLX"): return 0
+            return 1
+    return 0
+
 def GetMnem(ea):
     return GetMnem_w(ea)
     return cache.access((_d,ea), lambda x: GetMnem_w(ea))
@@ -347,21 +365,23 @@ def ChangesPC(ea):
     >>> ChangesPC(0xff000000)
     False
     """
-    if GetMnem(ea) in ["B", "BX"]:
+    m = GetMnem(ea)
+    if m in ["B", "BX"]:
         return True
-    if GetMnem(ea) in ["ADD", "SUB", "MUL", "LDR", "MOV", "MVN"] and GetOpnd(ea,0) == "PC":
+    if m in ["ADD", "SUB", "MUL", "LDR", "MOV", "MVN"] and GetOpnd(ea,0) == "PC":
         return True
-    if GetMnem(ea) in ["POP"] and "PC" in GetOpnd(ea,0):
+    if m in ["POP"] and "PC" in GetOpnd(ea,0):
         return True
-    if GetMnem(ea) in ["LDM"] and "PC" in GetOpnd(ea,1):
+    if m in ["LDM"] and "PC" in GetOpnd(ea,1):
         return True
     return False
 def ReadRegs(ea):
-    if GetMnem(ea) in ["B", "BL", "BLX", "BX"]:
+    m = GetMnem(ea)
+    if m in ["B", "BL", "BLX", "BX"]:
         return getRegsS(GetOpnd(ea,0))
-    if GetMnem(ea) in ["ADD", "SUB", "RSB", "MUL", "AND", "ORR", "EOR", "BIC", "LSL", "LSR", "ASL", "ASR"]:
+    if m in ["ADD", "SUB", "RSB", "MUL", "AND", "ORR", "EOR", "BIC", "LSL", "LSR", "ASL", "ASR"]:
         return getRegsS(GetOpnd(ea,1)) + getRegsS(GetOpnd(ea,2))
-    if GetMnem(ea) in ["CMP", "CMN", "TST", "TEQ"]:
+    if m in ["CMP", "CMN", "TST", "TEQ"]:
         return getRegsS(GetOpnd(ea,0)) + getRegsS(GetOpnd(ea,1))
     return []
 
@@ -456,11 +476,22 @@ def isFuncStart(ea):
     False
     """
     return ea in _d.FUNCS
-def maybeFuncStart(ea):
-    if GetMnem(ea) == "PUSH": return True
-    if not ChangesPC(ea) and GetMnem(ea+4) == "PUSH": return True
+
+def maybePushFuncStart(ea):
+    #~ if GetMnem(ea) == "PUSH":
+    if GetMnef(ea) == "PUSH":
+        #~ print GetOpnd(ea,0)
+        if "LR" in GetOpnd(ea,0):
+            return True
     return False
 
+def maybeFuncStart(ea):
+    #~ if GetCondSuffix(ea): return False
+    for i in range(3):
+        if maybePushFuncStart(ea + i*4): return True
+        if GetMnef(ea + i*4) not in instructions_allowed_for_func_start: return False
+        if ChangesPC(ea + i*4): return False
+    return False
 
 def filter_non_printable(str):
     f = ''.join([c for c in str if ord(c) <= ord('z')])
@@ -486,7 +517,15 @@ def CodeRefsTo(ea,ghost=0):
     for a,r in R:
         #~ if isFuncStart(r):
         CR.append(a)
-    return CR
+    
+    # try to go back through a jump table
+    if GetMnem(ea) in ["B", "POP"]:
+        while GetMnem(ea) in ["B", "POP"]:
+            ea -= 4;
+        if ChangesPC(ea):
+            CR.append(ea)
+    
+    return list(set(CR))
 
 def DataRefsTo(ea,ghost=0):
     DR = []
@@ -549,7 +588,6 @@ def find_func(possible_names):
         if name in possible_names:
             print "Function found at %x" % ea
             return ea
-
 
 import emusym
 def callsAbortFunc(ea):

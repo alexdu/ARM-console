@@ -15,6 +15,7 @@ import inspect, os
 from emusym import *
 from pprint import pprint
 from idapy import *
+import deco
 
 #~ resetLog()
 #~ resetArm()
@@ -22,7 +23,7 @@ from idapy import *
 def go_back(cp):
     #~ print cp
     prev_addrs = list(CodeRefsTo(cp[0], 1))
-    for p in prev_addrs:
+    for p in sorted(prev_addrs, key=lambda x: abs(x - cp[0]) + (1000 if x > cp[0] else 0)):
         #~ print "%X"%p, GetDisasm(p)
         if p not in cp:
             cp = [p] + cp
@@ -61,11 +62,38 @@ def back_solve(ea, unknowns):
         print "code path contains loops => skipping"
         
     return try_solve(cp, regs, force=True)
+
+def back_deco(ea):
+    resetArm()
     
+    cp = [ea]
+    while not isFuncStart(cp[0]):
+        try:
+            cp = go_back(cp)
+        except IndexError:
+            print "WARNING: no code refs to %X" % cp[0]
+            break
+        except:
+            pass
+            break
+
+    resetArm(True)
+    #~ emusym.print_cp(cp)
+    cp = emusym.strip_wrong_branches(cp)
+    emusym.print_cp(cp)
+    CP = emusym.add_branch_info(cp)
+    print "emulating code path..."
+    ct = emusym.emusym_code_path(CP,codetree=True)
+    print "rebuilding..."
+    ct = deco.rebuild_tree(ct)
+    print emusym.P.doprint(ct)
+    return ct
 
 def try_solve(cp,regs,force=False):
+    cp = emusym.strip_wrong_branches(cp)
     resetArm(func = isFuncStart(cp[0]))
-    #~ print cp
+    print cp
+    emusym.print_cp(cp)
     emusym_code_path(cp[:-1])
     val = string.join([str(eval(r)) for r in regs], " ")
     #~ print "val=",val

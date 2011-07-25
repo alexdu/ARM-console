@@ -1,4 +1,5 @@
 from scripts import *
+from progress import progress
 
 def funref(f):
     l = CodeRefsFrom(f)
@@ -90,7 +91,7 @@ def extrapolate(d):
 def sourcefile(dump, addr, partial=False):
     try: return dump.SRCFILES[addr]
     except: pass
-    refs = find_refs(dump, func=addr)
+    refs = disasm.find_refs(dump, func=addr)
     for a,v in refs:
         s = GuessString(dump, v)
         if s:

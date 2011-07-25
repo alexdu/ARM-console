@@ -10,7 +10,7 @@
         <tr><td class=nstub colspan=6>NSTUB(0x$line['address'], $line['name'])</td></tr>
     #end if
     #if 'string' in $line
-        <tr><td class=addr>$line['address']:</td><td class=string colspan=5>STRING: $line['string']</td></tr>
+        <tr><td class=addr>$line['address']:</td><td class=string colspan=4>STRING: $line['string']</td><td class=refs>$line['refs']</td></tr>
     #end if
     #if not 'hidden' in $line
         #if 'undefined' in $line

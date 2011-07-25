@@ -23,6 +23,8 @@ from sympy.printing.printer import Printer
 from sympy.printing.str import StrPrinter
 #from pprint >> log, import pprint
 
+guess_unknown_structs = 0
+
 log = open("emusym.log", "w")
 clog = open("emusym-c.log", "w")
 
@@ -61,16 +63,64 @@ BHMask = {'B': 0xFF, 'H': 0xFFFF}
    #~ def __repr__(self):
         #~ return "0x%X" % ctypes.c_uint32(self).value
 
-def GuessFunction(start):
-    try: 
-        CP = find_code_paths(start,timeout=5)
-    except Exception: 
-        print "time out"
+def GuessFunction(start, quick = False):
+
+    if GetMnef(start) == "B":
+        print "j_something"
+        return start + 4
+    if GetMnem(start)=="BX" and GetOpnd(start,0) == "LR":
+        print "bx lr (nullsub)"
+        return start + 4
+    if GetMnef(start) not in idapy.instructions_allowed_for_func_start:
+        print "first instruction invalid"
         return
+    if start in idapy._d.STRMASK:
+        print "first instruction is inside a string"
+        return
+    
+    endq = start
+    while maybeFuncStart(endq + 4):
+        endq += 4
+    undefined = 0
+    while not maybeFuncStart(endq + 4):
+        endq += 4
+        if not GetMnem(endq):
+            undefined += 1
+        else:
+            undefined = 0
+        if undefined > 100:
+            print "quick guess: this doesn't look like code..."
+            endq = None
+            break
+        if endq - start > 30000:
+            print "quick guess: this is huge..."
+            endq = None
+            break
+    
+    if quick:
+        end = endq
+        if endq: print "Size (quick guess):", end+4-start
+        return end
+    # this is slow... 
+    try: 
+        CP = find_code_paths(start,timeout=0.1)
+    except Exception: 
+        if endq:
+            print "time out, using quick guess"
+            end = endq
+            print "Size (quick guess):", end+4-start
+            return end
+        else:
+            return
     end = 0
     for cp in CP:
         end = max(end, max(cp)[0])
-    print "Size:", end+4-start
+    if endq: print "Size (quick guess):", endq+4-start
+    print "Size (code paths) :", end+4-start
+    if endq and end - endq > 1000:
+        print "Using quick guess"
+        return endq # full guess overestimate?
+    print "Using code path guess"
     return end
 
 
@@ -112,12 +162,64 @@ def cf_only(cpf):
     cp,cf = split_code_path_ea_cond(cpf)
     return cf
 
+def get_neighbour_instructions(cp,ea):
+    
+    start = 0
+    end = 0
+    for i,a in enumerate(cp):
+        if a == ea:
+            break
+        if ChangesFlags(a):
+            start = i + 1
+
+    for i,a in enumerate(cp):
+        if i > start:
+            if ChangesFlags(a):
+                end = i
+                break
+    return cp[start:end]
+    
+def strip_wrong_branches(cp):
+    CP = copy(cp)
+    cpx = cp + [cp[-1] + 4]
+    for ea,next_ea in zip(cpx[:-1], cpx[1:]):
+        if GetMnem(ea) == "B":
+            if GetOperandValue(ea,0) != next_ea:
+                CP.remove(ea)
+                if GetCondSuffix(ea): # will remove neighbor instructions with similar condition flags
+                    #~ print get_neighbour_instructions(cp,ea)
+                    for a in get_neighbour_instructions(cp,ea): # fixme: there may be still some tricky cases uncovered...
+                        if a != ea and GetCondSuffix(a) == GetCondSuffix(ea):
+                            print a, GetDisasm(a)
+                            CP.remove(a)
+    return CP
+
+def add_branch_info(cp):
+    #~ print "add_branch_info"
+    CP = find_code_paths(cp[0], single_ref_codepath = cp)
+    #~ pprint(CP)
+    for c in CP:
+        co = cp_only(c)
+        #~ print "co",co
+        #~ print "cp",cp
+        #~ print "======"
+        #~ emusym.print_cp(co)
+        l = min(len(co), len(cp))
+        if co[:l] == cp[:l]:
+            return c[:l]
+    print "bad codepath?"
+    print_cp(cp)
+    pprint(CP)
+    print
+    print "cp_debug = ", cp_only(cp)
+    
+
 # returns:
 # * a list of code paths with flags (cpf)
 # * a code path is a list of (addr, condition_flags)
 
 timeout_deadline = time.time() + 10000
-def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100):
+def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100, single_ref_codepath = None):
     global timeout_deadline
     if timeout:
         timeout_deadline = time.time() + timeout
@@ -151,15 +253,30 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100):
         #~ i0 = E.index(startAddr)
     #~ else: 
         #~ i0 = 0
-    
+
+    if single_ref_codepath is not None:
+        #~ print ea
+        #~ print "ref ", [hex(i) for i in single_ref_codepath]
+        chk = cp_only(cpf)
+        #~ print "chk ", [hex(i) for i in chk]
+        for a,b in zip(chk,single_ref_codepath): # compare prefixes
+            if a != b:
+                #~ print "mismatch: ", hex(a), hex(b)
+                return [[(-1,-1)]]
+        #~ print "ok"
+
     #~ ea = E[i0]
     while True:
     #for ie in range(i0, len(E)):   # first instruction is either a branch or the first instruction
+        #~ print ea
         print >> log, "%X"%ea, GetDisasmQ(ea) 
         #time.sleep(0.1)
         #~ print "%X"%ea, GetDisasmQ(ea)
             
         m = GetMnem(ea)
+        if not m:
+            print "undefined instruction"
+            return CP
         suffix = GetCondSuffix(ea)
         if not suffix:             # regular instruction, just execute it
             cpf.append((ea,branches))
@@ -190,11 +307,21 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100):
                 print >> log, "RETURN at %x" % ea
                 break
             if ChangesPC(ea):
-                print "Jumpy?"
-                for off in range(100):
-                    newAddr = ea + off * 4 + 8
-                    CP += find_code_paths(ea, newAddr, cpf, ["EQ%d" % off], None)
-                    if GetMnem(newAddr) not in ["B", "POP"]: break
+                print "Jumpy?", hex(ea), GetDisasm(ea), GetMnef(ea)
+                if GetMnef(ea) == "ADDLS":
+                    for off in range(100):
+                        newAddr = ea + off * 4 + 8
+                        CP += find_code_paths(ea, newAddr, cpf, ["EQ%d" % off], None, single_ref_codepath)
+                        if GetMnem(newAddr) not in ["B", "BX", "POP"]: break
+                elif GetMnef(ea) == "LDRLS":
+                    for off in range(100):
+                        newAddr = ea + off * 4 + 8
+                        newAddr = idapy._d.ROM[newAddr]
+                        if newAddr not in idapy._d.ROM: break
+                        print hex(newAddr)
+                        CP += find_code_paths(ea, newAddr, cpf, ["EQ%d" % off], None, single_ref_codepath)
+                else:
+                    print "dunno..."
                 return CP
                     
         elif suffix in branchx:
@@ -202,8 +329,8 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100):
             if flagsDirty: 
                 print >> log, "flags dirty => new branch"
                 # new branch with same suffix (flags changed?)
-                CP += find_code_paths(ea, ea, cpf, [OppositeSuffix(suffix)], None)
-                CP += find_code_paths(ea, ea, cpf, [suffix], None)
+                CP += find_code_paths(ea, ea, cpf, [OppositeSuffix(suffix)], None, single_ref_codepath)
+                CP += find_code_paths(ea, ea, cpf, [suffix], None, single_ref_codepath)
                 return CP
             else:
                 print >> log, "flags clean => same branch"
@@ -234,11 +361,21 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100):
                         print >> log, "RETURN at %x" % ea
                         break
                     if ChangesPC(ea):
-                        print "Jumpy?"
-                        for off in range(100):
-                            newAddr = ea + off * 4 + 8
-                            CP += find_code_paths(ea, newAddr, cpf, ["EQ%d" % off], None)
-                            if GetMnem(newAddr) not in ["B", "POP"]: break
+                        print "Jumpy?", hex(ea), GetDisasm(ea), GetMnef(ea)
+                        if GetMnef(ea) == "ADDLS":
+                            for off in range(100):
+                                newAddr = ea + off * 4 + 8
+                                CP += find_code_paths(ea, newAddr, cpf, ["EQ%d" % off], None, single_ref_codepath)
+                                if GetMnem(newAddr) not in ["B", "BX", "POP"]: break
+                        elif GetMnef(ea) == "LDRLS":
+                            for off in range(100):
+                                newAddr = ea + off * 4 + 8
+                                newAddr = idapy._d.ROM[newAddr]
+                                if newAddr not in idapy._d.ROM: break
+                                print hex(newAddr)
+                                CP += find_code_paths(ea, newAddr, cpf, ["EQ%d" % off], None, single_ref_codepath)
+                        else:
+                            print "dunno..."
                         return CP
                 else:
                     print >> log, "opposite condition => skipping"
@@ -246,8 +383,8 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100):
         else: # some other suffix
             print >> log, "some other suffix => expanding current branch (suffix=%s, branches=%s)" % (suffix,branches)
             # new branch with another suffix
-            CP += find_code_paths(ea, ea, cpf, branches + [OppositeSuffix(suffix)], None)
-            CP += find_code_paths(ea, ea, cpf, branches + [suffix], None)
+            CP += find_code_paths(ea, ea, cpf, branches + [OppositeSuffix(suffix)], None, single_ref_codepath)
+            CP += find_code_paths(ea, ea, cpf, branches + [suffix], None, single_ref_codepath)
             return CP
 
 
@@ -478,11 +615,11 @@ class CALL(Function):
 class RETURN(Function):
     pass
 
-class MEMWRITE(Function):
-    pass
+#~ class MEMWRITE(Function):
+    #~ pass
 
-class MEMREAD(Function):
-    pass
+#~ class MEMREAD(Function):
+    #~ pass
 
 class REGWRITE(Function):
     pass
@@ -518,15 +655,18 @@ class DecoPrinter(StrPrinter):
         if base+off in idapy._d.A2N:
             structname = self._get_struct_name(base)
             fieldname = idapy._d.A2N[base+off]
-            if fieldname.startswith(structname):
+            if fieldname.startswith(structname + "."):
                 fieldname = fieldname[len(structname):]
                 fieldname = fieldname.strip("._")
+            else:
+                if not off:
+                    return ".off_0x" + hex(off) + (" /*0x%s*/" % hex(base+off))
             return "." + fieldname + (" /*off_0x%s, 0x%s*/" % (hex(off), hex(base+off)))
         else:
             return ".off_0x" + hex(off) + (" /*0x%s*/" % hex(base+off))
         
     def _print_Add(self,expr):
-        if type(expr.args[1]) == STRUCTPTR:
+        if len(expr.args) == 2 and type(expr.args[1]) == STRUCTPTR:
             try:
                 base = int(expr.args[1].args[0])
                 off = int(expr.args[0])
@@ -538,7 +678,7 @@ class DecoPrinter(StrPrinter):
 
     def _print_MEM(self,expr):
         addr = expr.args[0]
-        if type(addr) == Add:
+        if type(addr) == Add and len(addr.args) == 2:
             if type(addr.args[1]) in [STRUCTPTR, STRUCTPTR_MAYBE]:
                 try:
                     base = int(addr.args[1].args[0])
@@ -560,7 +700,7 @@ class DecoPrinter(StrPrinter):
             except: return self._ptr(expr)
             off = 0
             n = idapy._d.A2N.get(base, "struct_0x%x" % base)
-            return n + ("" if "."in n else ".off_0")
+            return n + ("" if "." in n else ".off_0")
         
         return self._ptr(expr)
 
@@ -591,9 +731,9 @@ class DecoPrinter(StrPrinter):
         cf = self._print(expr.args[0])
         #~ return "if %s:\n" % (cf)
         if expr.args[1].args: # if it does something... (branch not empy)
-            ce = cond_eval(cf, condit)
-            if ce is not None:
-                if not ce: return "(false)"
+            #~ ce = cond_eval(cf, condit)
+            #~ if ce is not None:
+                #~ if not ce: return "(false)"
                 
             cs = cond_str(cf, condit, self)
             if cs:
@@ -613,13 +753,17 @@ class DecoPrinter(StrPrinter):
     def _print_STRUCTPTR(self,expr):
         addr = expr.args[0]
         prefix = "&" if addr < 0x40000000 else ""
-        try: return prefix + "%s" % idapy._d.A2N[int(addr)]
-        except: return str(expr)
+        try:
+            addr = int(addr) 
+            return prefix + self._get_struct_name(addr) + self._get_struct_off_name(addr, 0)
+        except: 
+            raise
+            #~ return str(expr)
             #~ except: return "STRUCT(%s)" % addr
 
-    def _print_STRUCTPTR_MAYBE(self,expr):
-        try: return "0x" + hex(expr.args[0])
-        except: return self._print(expr.args[0])
+    #~ def _print_STRUCTPTR_MAYBE(self,expr):
+        #~ try: return "0x" + hex(expr.args[0])
+        #~ except: return self._print(expr.args[0])
 
     def _print_AND(self,expr):
         a = expr.args[0]
@@ -661,6 +805,8 @@ class DecoPrinter(StrPrinter):
 
             try: v = int(v)
             except: pass
+            typ_eq_hex = type(typ).__name__ == 'function' and typ.func_name == "hex"
+            #~ print name,typ,v,hex,typ==hex
             #~ call_line += "(" + type(v).__name__ + ")"
             if type(v) in [int,long]:
                 if typ is None: 
@@ -669,7 +815,7 @@ class DecoPrinter(StrPrinter):
                     else:
                         call_line += disasm.guess_data(idapy._d, v)
                 elif typ==int: call_line += "%d" % v
-                elif typ==hex: call_line += "0x" + hex(v)
+                elif typ_eq_hex: call_line += "0x" + hex(v)
                 elif typ==str: call_line += "%s" % repr(GetString(v))
                 elif typ==ptr: call_line += "&(%s)" % P.doprint(MEM(v))
             else:
@@ -847,10 +993,11 @@ def create_graph(CP, filename="emusym.svg"):
 
 
 def print_cp(cp):
-    print >> log, "" 
-    print >> log, "CODE PATH:"
+    print "" 
+    print "CODE PATH:"
     for ea in cp:
-        print >> log, "R0M:%X"%ea, GetDisasmQ(ea)
+        #~ print "%X"%ea, "   ", GetDisasmQ(ea)
+        disasm.show_disasm(idapy._d, ea)
 
 
 
@@ -997,6 +1144,14 @@ class MEMREAD(Function):
     @classmethod
     def eval(cls, ea):
         ea = copy(ea)
+        #~ print ea
+        if type(ea) == STRUCTPTR_MAYBE:
+            return MEMREAD(STRUCTPTR(ea.args[0]))
+        if type(ea) == Add:
+            if type(ea.args[1]) == STRUCTPTR_MAYBE:
+                assert len(ea.args) == 2
+                return MEMREAD(Add(ea.args[0], STRUCTPTR(ea.args[1].args[0])))
+
         if ea in ARM.MEMDIC:
             return copy(ARM.MEMDIC[ea])
         try:
@@ -1005,6 +1160,18 @@ class MEMREAD(Function):
         except:
             pass
         return MEM(ea)
+
+class MEMWRITE(Function):
+    @classmethod
+    def eval(cls, ea, value):
+        ea = copy(ea)
+        #~ print ea
+        if type(ea) == STRUCTPTR_MAYBE:
+            return MEMWRITE(STRUCTPTR(ea.args[0]), value)
+        if type(ea) == Add:
+            if type(ea.args[1]) == STRUCTPTR_MAYBE:
+                assert len(ea.args) == 2
+                return MEMWRITE(Add(ea.args[0], STRUCTPTR(ea.args[1].args[0])), value)
 
 # this one only reads from ROM upon evaluation
 class MEM(Function):
@@ -1100,6 +1267,10 @@ class STRUCTPTR(Function):
     
 class STRUCTPTR_MAYBE(Function): # could be unnamed struct or plain integer; if used in MEM(integer_off + struct_addr), it's considered a struct
     pass
+    #~ @classmethod
+    #~ def eval(cls, a):
+        #~ print "STRUCTPTR_MAYBE eval to", a
+        #~ return a
 
 
 class infix:
@@ -1359,7 +1530,11 @@ def emusym_code_path(cpf, codetree=False):
                             if not idapy._d.A2N[eval(b)].isupper(): # uppercase names are not structs
                                 b = "STRUCTPTR(%s)" % eval(b)
                         else:
-                            b = "STRUCTPTR_MAYBE(%s)" % eval(b)
+                            if guess_unknown_structs:
+                                b = "STRUCTPTR_MAYBE(%s, evaluate=False)" % eval(b)
+                                # don't evaluate this right now
+                                # we'll find out if it's a struct if it will become an argument of some MEMREAD/MEMWRITE
+                                # otherwise, it's a plain number, and it will be evaluated (and simplified) at rebuilding stage
                 except: pass
             
             B,H = GetByteSuffix(ea), GetHalfwordSuffix(ea)
@@ -1578,6 +1753,7 @@ def emusym_code_path(cpf, codetree=False):
             dest,post = TranslateOperand(ea,0)
             func = eval(dest)            
             if codetree: 
+                print >> log, CALL(ea, func, ARM.R0, ARM.R1, ARM.R2, ARM.R3, MEMREAD(ARM.SP), MEMREAD(ARM.SP+4), MEMREAD(ARM.SP+8), MEMREAD(ARM.SP+12))
                 try: AddInstr(CALL(ea, func, ARM.R0, ARM.R1, ARM.R2, ARM.R3, MEMREAD(ARM.SP), MEMREAD(ARM.SP+4), MEMREAD(ARM.SP+8), MEMREAD(ARM.SP+12)))
                 except: 
                     AddInstr(Symbol("Buggy_CALL"))
@@ -1597,7 +1773,7 @@ def emusym_code_path(cpf, codetree=False):
                     #~ print MEMREAD(ARM.SP)
                     #~ print ARM.MEMDIC
                     #~ print copy(ARM.SP) in ARM.MEMDIC, ARM.MEMDIC.get(ARM.SP)
-                    #~ print str(CALL(ea, func, *args))
+                    print >> log, str(CALL(ea, func, *args))
                     #~ try: AddInstr(Symbol(str(CALL(ea, func, *args))))
                     try: AddInstr(CALL(ea, func, *args))
                     except: 
@@ -1617,7 +1793,7 @@ def emusym_code_path(cpf, codetree=False):
             for r in getRegsS(GetDisasmQ(ea).split(";")[0]):
                 run("ARM." + r + " = Symbol('unhandled." + r + "')")
             unhandled += 1
-            if codetree: AddInstr(Symbol("Unhandled_" + GetMnem(ea)))
+            if codetree: AddInstr(Symbol("Unhandled_" + str(GetMnem(ea))))
 
         if IsReturn(ea):
             print >> log, "  => return"

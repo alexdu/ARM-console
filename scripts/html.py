@@ -195,7 +195,7 @@ def disasm_html(dump, start, end, f=None):
         l = dump.DISASM.get(a)
         L = {}
         L['anchor'] = "_%X" % a
-        crefs = CodeRefsTo(a)
+        crefs = idapy.CodeRefsTo(a)
         L['refs'] = string.join([link2addr(r) for r in crefs[:5]]).replace(">%X<" % (a-4), ">&#x2B01;<")
         if len(crefs) > 5: L['refs'] += "... (total %d refs)" % len(crefs)
         if not l: 
@@ -273,7 +273,7 @@ def disasm_html(dump, start, end, f=None):
 
             if addr+4 in dump.FUNCENDS:
                 st = dump.FUNCENDS[addr+4]
-                L['funcend'] = funcname(dump, which_func(dump,addr))
+                L['funcend'] = funcname(dump, st)
 
             if a in dump.STRMASK:
                 L['hidden'] = True
@@ -524,7 +524,7 @@ def index(D):
         func_index(dump)
         strings_index(dump)
         shutil.copyfile("scripts/html/disasm.css", os.path.join(change_ext(dump.bin, ""), "disasm.css"))
-    
+
 def quick(D):
     index(D)
     if type(D) != list: D = [D]
@@ -535,7 +535,7 @@ def quick(D):
         select_dump(dump)
         
         progress("Function disassembly...")
-        for i,a in enumerate(dump.FUNCS):
+        for i,a in enumerate(sorted(dump.FUNCS, key=lambda x: funcname(dump, x))):
             #~ continue
             progress(float(i) / len(dump.FUNCS))
             F = dump.Fun(a)
@@ -681,10 +681,11 @@ def auto(D):
     if type(D) != list: D = [D]
     for dump in D:
         select_dump(dump)
+        dump.update_func_indexes()
+        disasm.remove_autogen_string_names(dump)
         srcguess.extrapolate(dump)
-    for dump in D:
-        guessfunc.analyze_names(dump)
-        guessfunc.analyze_bx(dump)
+    #~ for dump in D:
+        #~ guessfunc.run(dump)
 
     tasks(D)
     semaphores(D)
