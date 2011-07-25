@@ -407,12 +407,13 @@ def inden(x):
 def cond_str(cf,condit,P):
     if condit.is_Atom or type(condit) == MEM:
         condit = P.doprint(condit)
+        if cf.startswith("NE_and_"): cf = cf[7:]
         if cf == "EQ": return "%s == 0" % condit
         elif cf == "NE": return "%s != 0" % condit
-        elif cf in ["GT", "HI", "NE_and_GT"]: return "%s > 0" % condit
-        elif cf in ["LT", "LS", "NE_and_LT"]: return "%s < 0" % condit
-        elif cf in ["GE", "NE_and_GE"]: return "%s >= 0" % condit
-        elif cf in ["LE", "NE_and_LE"]: return "%s <= 0" % condit
+        elif cf in ["GT", "HI"]: return "%s > 0" % condit
+        elif cf in ["MI", "LT", "LO", "CC"]: return "%s < 0" % condit
+        elif cf in ["CC","HS", "PL", "GE"]: return "%s >= 0" % condit
+        elif cf in ["LS", "LE"]: return "%s <= 0" % condit
         
     if type(condit) == Add and len(condit.args) == 2:
         a = P.doprint(condit.args[1])
@@ -420,15 +421,15 @@ def cond_str(cf,condit,P):
         ma = P.doprint(-condit.args[1])
         mb = P.doprint(condit.args[0])
         #~ print a,b,ma,mb
+        if cf.startswith("NE_and_"): cf = cf[7:]
         if cf == "EQ": 
             pl = "%s == %s" % (a,b)
             mi = "%s == %s" % (ma,mb)
             return mi if a.startswith("-") and b.startswith("-") else pl
-        elif cf == "NE": return "%s != %s" % (a,b)
-        elif cf in ["GT", "HI", "NE_and_GT"]: return "%s > %s" % (a,b)
-        elif cf in ["LT", "LS", "NE_and_LT"]: return "%s < %s" % (a,b)
-        elif cf in ["GE", "NE_and_GE"]: return "%s >= %s" % (a,b)
-        elif cf in ["LE", "NE_and_LE"]: return "%s <= %s" % (a,b)
+        elif cf in ["GT", "HI"]: return "%s > %s" %  (a,b)
+        elif cf in ["MI", "LT", "LO", "CC"]: return "%s < %s" %  (a,b)
+        elif cf in ["CC","HS", "PL", "GE"]: return "%s >= %s" %  (a,b)
+        elif cf in ["LS", "LE"]: return "%s <= %s" %  (a,b)
 
 def cond_eval(cf,condit):
     if condit.is_Atom:
