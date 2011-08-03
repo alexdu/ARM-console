@@ -1,5 +1,6 @@
 from scripts import *
 from progress import progress
+import disasm
 
 def funref(f):
     l = CodeRefsFrom(f)
@@ -93,7 +94,7 @@ def sourcefile(dump, addr, partial=False):
     except: pass
     refs = disasm.find_refs(dump, func=addr)
     for a,v in refs:
-        s = GuessString(dump, v)
+        s = disasm.GuessString(dump, v)
         if s:
             if s.endswith(".c") or s.endswith(".cfg"):
                 return s

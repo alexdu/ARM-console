@@ -187,6 +187,10 @@ def callers_html_quick(dump,value=None, func=None, context=0, f=sys.stdout):
             C.append(c)
     return C
 
+def reflist(a, crefs, nmax=5):
+    R = string.join([link2addr(r) for r in crefs[:nmax]]).replace(">%X<" % (a-(nmax-1)), ">&#x2B01;<")
+    if len(crefs) > nmax: R += "... (total %d refs)" % len(crefs)
+    return R
 
 def disasm_html(dump, start, end, f=None):
     if end is None: end = start+4
@@ -196,8 +200,7 @@ def disasm_html(dump, start, end, f=None):
         L = {}
         L['anchor'] = "_%X" % a
         crefs = idapy.CodeRefsTo(a)
-        L['refs'] = string.join([link2addr(r) for r in crefs[:5]]).replace(">%X<" % (a-4), ">&#x2B01;<")
-        if len(crefs) > 5: L['refs'] += "... (total %d refs)" % len(crefs)
+        L['refs'] = reflist(a, crefs)
         if not l: 
             #~ print >> f, "%s: <empty>" % link2addr(a)
             continue
@@ -693,6 +696,39 @@ def auto(D):
     properties(D)
     eventprocs(D)
 
+def find_props_from_strings(d):
+	P = defaultdict(list)
+	for a,s in d.STRINGS.iteritems():
+		m = re.search(r"(PROP_[A-Z0-9_]+)", s)
+		if m:
+			prop_name = m.groups()[0]
+			P[prop_name] += find_refs(d, a)
+	for p in P:
+		print p
+	return P
+
+def find_props_from_strings_and_decompile_backwards(d):
+    P = []
+    for a,s in d.STRINGS.iteritems():
+        m = re.search(r"(PROP_[A-Z0-9_]+)", s)
+        if m:
+            refs = find_refs(d, a)
+            for code_addr, string_addr in refs:
+                code_addr_vanilla = code_addr
+                for i in range(5):
+                    off_addr = code_addr + i * 4
+                    if 'DebugMsg' in GetDisasm(off_addr):
+                        code_addr = off_addr
+                        break
+                print code_addr,s,GetDisasm(code_addr)
+                try: dec = bkt.back_deco(code_addr)
+                except: dec = None
+                dec = deco.P.doprint(dec)
+                P.append({'str': s, 'addr': reflist(code_addr_vanilla, [code_addr_vanilla]), 'decompiled': dec})
+                #~ if len(P) > 30: 
+                    #~ return P
+    return P
+
 def properties(D):
     if type(D) != list: D = [D]
     for dump in D:
@@ -743,7 +779,19 @@ def properties(D):
         for a in copy(Props.keys()):
             Props[a] = string.join([str(x) for x in set(Props[a])], ", ")
         ns['props'] = Props
-        print Funcs[0]
+        #~ print Funcs[0]
+        
+        prop_strings = find_props_from_strings(dump)
+        PS = {}
+        for p,r in prop_strings.iteritems():
+            print r
+            PS[p] = reflist(0, [x[0] for x in r], nmax=50)
+        ns['prop_strings'] = PS
+        
+        prop_strings_dec = find_props_from_strings_and_decompile_backwards(dump)
+        ns['props_dec'] = prop_strings_dec
+        
+        
         f = openf(dump.bin, "properties.htm")
         print >> f, Template(file="Properties.tmpl", searchList=[ns])
         f.close()

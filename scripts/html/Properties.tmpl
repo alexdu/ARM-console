@@ -7,11 +7,26 @@ Properties
 <h2>Properties in $dumpname</h2>
 
 <table>
-<tr><th>Property</th><th>Size</th></tr> 
+<tr><th>Property values</th><th>Size</th></tr> 
 #for $prop in sorted($props)
     <tr><td><%= hex(prop) %></td><td>$props[$prop]</td>
 #end for
 </table>
+
+<table>
+<tr><th>Property strings</th><th>References</th></tr> 
+#for $prop_string in sorted($prop_strings)
+    <tr><td>$prop_string</td><td>$prop_strings[$prop_string]</td>
+#end for
+</table>
+
+#for $pd in $props_dec
+    <h4 id=callers>Back deco for <i>$pd['str']</i> referenced at $pd['addr'] :</h4> 
+<pre>
+$pd['decompiled']
+</pre> 
+#end for
+
 #for $func in $funcs
     <h2 id=callers>Calls to $func['name']:</h2> 
     <table>

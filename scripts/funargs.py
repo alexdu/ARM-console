@@ -212,7 +212,13 @@ FS["register_func"] = FSig(None, None, None, None, ret=void)
 FS["cmpString"] = FSig(None, None, ret=int)
 FS["task_create"] = FSig(None, None, None, None, None, ret=void)
 FS["dma_addr_to_user_addr"] = FSig(int, ret=int)
-
+FS["SubscribeNotifyFromPartner"] = FSig(None, None, ret=void)
+FS["SubscribeSwitchFromPartner"] = FSig(None, None, ret=void)
+FS["SubscribeSpecificFromPartner"] = FSig(None, None, ret=void)
+FS["SubscribeLCDFromPartner"] = FSig(None, None, ret=void)
+FS["SubscribeLiveViewFromPartner"] = FSig(None, None, ret=void)
+FS["SubscribeMachineCellFromPartner"] = FSig(None, None, ret=void)
+FS["SubscribeFactoryFromPartner"] = FSig(None, None, ret=void)
 
 def getFuncSignature(ea):
     fn = GetName(ea)

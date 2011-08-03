@@ -22,7 +22,6 @@ import emusym
 import deco
 import shutil
 import bkt
-import srcguess
 
 gui_enabled = False
 armelf = "arm-elf-"
@@ -241,6 +240,12 @@ class Dump(Bunch):
         for f,e in dump.FUNCS.iteritems():
             dump.FUNCENDS[e] = f
         print "ok."
+
+def gen_fwcheck(d, stubfile):
+    a2n,n2a = match.parse_stub(stubfile)
+    for a,n in sorted(a2n.iteritems()):
+        if a in d.ROM:
+            print "CHECK(%10s, %10s) // %s" % (hex(a).strip("L"), hex(d.ROM.get(a)).strip("L"), n)
 
 class Fun():
     """
@@ -808,6 +813,12 @@ def friendly_disasm(dump,l):
     l = string.join(items, "\t")
     return l
 
+def c_asm(dump, start, end):
+    print 'asm('
+    for a in range(start, end, 4): 
+        print '    "%s \\n"' % string.join(dump.DISASM[a].split("\t")[2:4])
+    print ');'
+
 # code adapted from disasm.py
 def show_disasm(dump, start, end=None):
     """
@@ -960,7 +971,7 @@ def _magic_r(self, s):
         print "Please select a dump first. Example:"
         print "sel t2i"
         return
-    a = addr_from_magic_string(s)
+    a = addr_from_magic_string(s, rounded_32bit = False)
     idapy._d.refs(a)
 
 def _magic_d(self, s):

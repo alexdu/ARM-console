@@ -67,7 +67,7 @@ def back_deco(ea):
     resetArm()
     
     cp = [ea]
-    while not isFuncStart(cp[0]):
+    while not isFuncStart(cp[0]) and not maybeFuncStart(cp[0]):
         try:
             cp = go_back(cp)
         except IndexError:

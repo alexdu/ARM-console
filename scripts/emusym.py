@@ -309,19 +309,20 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100, s
             if ChangesPC(ea):
                 print "Jumpy?", hex(ea), GetDisasm(ea), GetMnef(ea)
                 if GetMnef(ea) == "ADDLS":
-                    for off in range(100):
+                    for off in range(500):
                         newAddr = ea + off * 4 + 8
                         CP += find_code_paths(ea, newAddr, cpf, ["EQ%d" % off], None, single_ref_codepath)
                         if GetMnem(newAddr) not in ["B", "BX", "POP"]: break
                 elif GetMnef(ea) == "LDRLS":
-                    for off in range(100):
+                    for off in range(500):
                         newAddr = ea + off * 4 + 8
                         newAddr = idapy._d.ROM[newAddr]
                         if newAddr not in idapy._d.ROM: break
                         print hex(newAddr)
                         CP += find_code_paths(ea, newAddr, cpf, ["EQ%d" % off], None, single_ref_codepath)
                 else:
-                    print "dunno..."
+                    print "dunno...", hex(ea), GetDisasm(ea)
+                    CP.append(cpf)
                 return CP
                     
         elif suffix in branchx:
@@ -363,19 +364,20 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100, s
                     if ChangesPC(ea):
                         print "Jumpy?", hex(ea), GetDisasm(ea), GetMnef(ea)
                         if GetMnef(ea) == "ADDLS":
-                            for off in range(100):
+                            for off in range(500):
                                 newAddr = ea + off * 4 + 8
                                 CP += find_code_paths(ea, newAddr, cpf, ["EQ%d" % off], None, single_ref_codepath)
                                 if GetMnem(newAddr) not in ["B", "BX", "POP"]: break
                         elif GetMnef(ea) == "LDRLS":
-                            for off in range(100):
+                            for off in range(500):
                                 newAddr = ea + off * 4 + 8
                                 newAddr = idapy._d.ROM[newAddr]
                                 if newAddr not in idapy._d.ROM: break
                                 print hex(newAddr)
                                 CP += find_code_paths(ea, newAddr, cpf, ["EQ%d" % off], None, single_ref_codepath)
                         else:
-                            print "dunno..."
+                            print "dunno...", hex(ea), GetDisasm(ea)
+                            CP.append(cpf)
                         return CP
                 else:
                     print >> log, "opposite condition => skipping"
@@ -405,8 +407,15 @@ def inden(x):
     return "    " + x.replace("\n", "\n    ")
 
 def cond_str(cf,condit,P):
+    
+    m = re.match("EQ([0-9]+)", cf)
+    if m:
+        value = int(m.groups()[0])
+        return cond_str("EQ", condit - value, P)
+    
     if condit.is_Atom or type(condit) == MEM:
         condit = P.doprint(condit)
+        assert cf != "NE_and_EQ"
         if cf.startswith("NE_and_"): cf = cf[7:]
         if cf == "EQ": return "%s == 0" % condit
         elif cf == "NE": return "%s != 0" % condit
@@ -421,6 +430,7 @@ def cond_str(cf,condit,P):
         ma = P.doprint(-condit.args[1])
         mb = P.doprint(condit.args[0])
         #~ print a,b,ma,mb
+        assert cf != "NE_and_EQ"
         if cf.startswith("NE_and_"): cf = cf[7:]
         if cf == "EQ": 
             pl = "%s == %s" % (a,b)
@@ -672,10 +682,13 @@ class DecoPrinter(StrPrinter):
                 base = int(expr.args[1].args[0])
                 off = int(expr.args[0])
                 assert off > 0
-            except: return super(DecoPrinter,self)._print_Add(expr)
+            except:
+                try: return super(DecoPrinter,self)._print_Add(expr)
+                except: return str(expr)
             return "&(" + self._get_struct_name(base) + self._get_struct_off_name(base, off) + ")"
         else:
-            return super(DecoPrinter,self)._print_Add(expr)
+            try: return super(DecoPrinter,self)._print_Add(expr)
+            except: return str(expr)
 
     def _print_MEM(self,expr):
         addr = expr.args[0]
@@ -738,7 +751,7 @@ class DecoPrinter(StrPrinter):
                 
             cs = cond_str(cf, condit, self)
             if cs:
-                return "if %s:\n%s" % (cs, inden(self._print(expr.args[1])))
+                return "if %s /*%s*/:\n%s" % (cs, cf, inden(self._print(expr.args[1])))
                 
             return "if %s(%s):\n%s" % (cf, self._print(condit), inden(self._print(expr.args[1])))
         return ""
