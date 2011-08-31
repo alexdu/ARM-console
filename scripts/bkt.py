@@ -141,12 +141,12 @@ def func_call_name(ea):
 # find args of the function call made at "ea", assuming the function has "numargs" arguments
 # returns: a string in a C-like pseudocode (with some notations inspired from python and octave)
 def find_func_call(ea, numargs):
-    allregs = ["ARM.R0", "ARM.R1", "ARM.R2", "ARM.R3"] + [ "MEM(ARM.SP+%d)"%k for k in range(0,13,4)]
+    allregs = ["ARM.R0", "ARM.R1", "ARM.R2", "ARM.R3"] + [ "MEMREAD(ARM.SP+%d)"%k for k in range(0,13,4)]
     regs = back_solve(ea, allregs[:numargs])
     #~ Regs = [STR(r, pointsto=True) for r in regs]
     P = DecoPrinter()
     Regs = [P.doprint(r) for r in regs]
-    #~ pprintpprint(ARM.MEMDIC)
+    #~ pprint(ARM.MEMDIC)
     return func_call_addr(ea), func_call_name(ea), "(" + string.join(Regs, ", ") + ")", Regs
 
 

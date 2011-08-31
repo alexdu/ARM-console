@@ -220,6 +220,8 @@ def disasm_html(dump, start, end, f=None):
 
             if 1:
                 data = 0
+                if raw > 0xff000000:
+                    data = raw
                 arg3 = False
                 try:
                     mnef = items[2]

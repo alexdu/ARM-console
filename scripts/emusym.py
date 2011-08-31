@@ -681,7 +681,7 @@ class DecoPrinter(StrPrinter):
             try:
                 base = int(expr.args[1].args[0])
                 off = int(expr.args[0])
-                assert off > 0
+                assert off > 0 and off < 0x1000
             except:
                 try: return super(DecoPrinter,self)._print_Add(expr)
                 except: return str(expr)
@@ -697,12 +697,13 @@ class DecoPrinter(StrPrinter):
                 try:
                     base = int(addr.args[1].args[0])
                     off = int(addr.args[0])
+                    assert off > 0 and off < 0x1000
                 except: return self._ptr(expr)
                 return self._get_struct_name(base) + self._get_struct_off_name(base, off)
             else:
                 try: 
                     off = int(addr.args[0])
-                    assert off > 0
+                    assert off > 0 and off < 0x1000
                 except: return self._ptr(expr)
                 struct = addr.args[1]
                 if struct.is_Atom:
@@ -1445,7 +1446,13 @@ def STR(x, pointsto=False):
         minusdec = str(ctypes.c_int32(x).value)
         candidates = [plusdec, plushex, minusdec, minushex]
         #~ print candidates
-        cost = [0.5 * len(x) + len(set(x)) - (0.5 if "0" in x.replace("0x","") else 0) - (0.5 if x[-1] == "0" else 0) for x in candidates]
+        cost = [0.5 * len(x) # short is better
+                + len(set(x)) # few unique digits is better
+                - (0.5 if "0" in x.replace("0x","") else 0) # prefer numbers with zeros
+                - (0.5 if x[-1] == "0" else 0) # prefer numbers ending in 0
+                + (0.5 if x[0] == "-" and len(x) > 3 else 0) # penalty for negative numbers
+                - (3 if x.startswith("0xFF") and not x.startswith("0xFFFFF") else 0)  # this may be an address in ROM => prefer hex
+                for x in candidates]
         #~ print cost
         for c,p in zip(candidates,cost):
             if p == min(cost):

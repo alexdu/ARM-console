@@ -219,8 +219,8 @@ def GetFunctionName(ea):
     try: ea = int(ea)
     except: return
     
-    f = disasm.which_func(_d,ea)
-    if f: return disasm.funcname(_d,f)
+    #~ f = disasm.which_func(_d,ea)
+    #~ if f: return disasm.funcname(_d,f)
     return disasm.funcname(_d,ea)
 
 def GetName(ea):

@@ -666,7 +666,15 @@ def index_refs(refs, ROM):
             except: pass
         except KeyError:
             pass
-    print "ok"
+
+    # you can run, but you cannot hide :)
+    print "..",  ; sys.stdout.flush()
+    for a,r in ROM.iteritems():
+        if r > 0xff000000 and r < 0xffffffff: # might be a function address
+            A2REFS[a].append(r)
+            REF2AS[r].append(a)
+        
+    print "ok"    
     return A2REFS, REF2AS
 
 def load_dumps(regex=""):
@@ -767,6 +775,8 @@ def friendly_disasm(dump,l):
     addr = int(items[0][:-1], 16)
     raw = int(items[1], 16)
     data = 0
+    if raw > 0xff000000:
+        data = raw
     arg3 = False
     try:
         mnef = items[2].lower()
@@ -871,7 +881,7 @@ def show_disasm(dump, start, end=None):
 
 def addr_from_magic_string(s, rounded_32bit = True):
     s = s.strip()
-    s = s.strip(":")
+    s = s.strip(":@")
     _ip = IPython.ipapi.get()
 
     try:
