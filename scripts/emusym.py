@@ -197,7 +197,7 @@ def strip_wrong_branches(cp):
 def add_branch_info(cp):
     #~ print "add_branch_info"
     CP = find_code_paths(cp[0], single_ref_codepath = cp)
-    #~ pprint(CP)
+    pprint(CP)
     for c in CP:
         co = cp_only(c)
         #~ print "co",co
@@ -219,7 +219,7 @@ def add_branch_info(cp):
 # * a code path is a list of (addr, condition_flags)
 
 timeout_deadline = time.time() + 10000
-def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100, single_ref_codepath = None):
+def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=10000, single_ref_codepath = None):
     global timeout_deadline
     if timeout:
         timeout_deadline = time.time() + timeout
@@ -264,6 +264,10 @@ def find_code_paths(ea, startAddr = None, prefix=[], branches=[], timeout=100, s
                 #~ print "mismatch: ", hex(a), hex(b)
                 return [[(-1,-1)]]
         #~ print "ok"
+        if len(chk) > len(single_ref_codepath):
+            #~ print cpf
+            CP.append(cpf)
+            return CP
 
     #~ ea = E[i0]
     while True:

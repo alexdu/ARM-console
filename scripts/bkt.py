@@ -63,7 +63,7 @@ def back_solve(ea, unknowns):
         
     return try_solve(cp, regs, force=True)
 
-def back_deco(ea):
+def back_deco(ea, skiplist=[]):
     resetArm()
     
     cp = [ea]
@@ -80,6 +80,10 @@ def back_deco(ea):
     resetArm(True)
     #~ emusym.print_cp(cp)
     cp = emusym.strip_wrong_branches(cp)
+
+    for sk in skiplist:
+        cp.remove(sk)
+    
     emusym.print_cp(cp)
     CP = emusym.add_branch_info(cp)
     print "emulating code path..."
