@@ -110,7 +110,7 @@ def GetOpnd(ea,i):
     if len(items) > 3:
         args = _regnames(items[3].replace(" ",""))
         args = re.sub(",([ALR][SO][LR])", "`\\1", args) # trick to stick LSL to previous operand
-        arglist = re.findall(r"(\([^\(\)]+\)|\[[^\[\]]+\]|\{[^\{\}]+\}|[^,]+)", args)
+        arglist = re.findall(r"(\([^\(\)]+\)|\[[^\[\]]+\]!*|\{[^\{\}]+\}|[^,]+)", args)
         try: return arglist[i].replace("`",",")
         except: return ""
 
