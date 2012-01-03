@@ -35,7 +35,7 @@ class Dump(Bunch):
         return "Dump of %s\nFields: %s" % (self.bin, string.join(self.__dict__.keys(), ", "))
 
     def __repr__(self):
-        return "Dump of %s" % self.bin
+        return "Dump of %s / %s" % (self.bin, self.idc)
 
     def refs(self, value=None, func=None, context=0, gui=gui_enabled):
         if gui:
@@ -110,6 +110,7 @@ class Dump(Bunch):
                         tryMakeSub(dump,a)
         elif file.lower().endswith(".idc"):
             a2n,n2a,fe = idc.parse(file)
+            D[b].idc = file
         else:
             raise Exception, "Unrecognized extension: " + file
         
@@ -122,7 +123,9 @@ class Dump(Bunch):
             dump._loadednames = {}
         dump._loadednames.update(n2a)
 
-    def save_names(dump, file):
+    def save_names(dump, file=None):
+        if not file:
+            file = dump.idc
         if os.path.isfile(file):
             shutil.copyfile(file, file + '~')
         if is_idc(file):
@@ -701,6 +704,7 @@ def load_dumps(regex=""):
     for b,i in idcs.iteritems(): # this needs cleanup
         D[b].A2N, D[b].N2A, D[b].FUNCS = cache.access(i, idc.parse)
         D[b].update_func_indexes()
+        D[b].idc = i
 
 
     for b,a in loadaddrs.iteritems():
@@ -917,6 +921,26 @@ def _magic_g(self, s):
     a = addr_from_magic_string(s)
     show_disasm(idapy._d, a, a+80)
 
+def _magic_bgmt(self, s):
+    """Find a button code, as seen by gui_main_task (BGMT code)
+    
+    Example: 
+    bgmt 0x820
+    """
+    s = s.strip()
+    if idapy._d is None:
+        print "Please select a dump first. Example:"
+        print "sel t2i"
+        return
+    a = addr_from_magic_string(s, rounded_32bit = False)
+    f = idapy._d.Fun("gui_massive_event_loop")
+    r = find_refs(idapy._d, a, f.addr)
+    
+    for a,v in r:
+        bkt.back_deco(a)
+    
+    print r
+
 def _magic_f(self, s):
     """Go to the function containing some ROM address or name.
     
@@ -1043,6 +1067,7 @@ IPython.ipapi.get().expose_magic("dec", _magic_d)
 IPython.ipapi.get().expose_magic("bd", _magic_bd)
 IPython.ipapi.get().expose_magic("n", _magic_n)
 IPython.ipapi.get().expose_magic("name", _magic_n)
+IPython.ipapi.get().expose_magic("bgmt", _magic_bgmt)
 
 def find_refs(dump,value=None, func=None):
     """
@@ -1181,9 +1206,9 @@ static main() {
     file.close()
 
     if na is None:
-        print "Saved %d names." % len(dump.N2A)
+        print "%s: saved %d names." % (file.name, len(dump.N2A))
     else:
-        print "Saved %d names out of %d." % (len(na), len(dump.N2A))
+        print "%s: saved %d names out of %d." % (file.name, len(na), len(dump.N2A))
     
     if dele:
         print "Deleted %d names." % dele
@@ -1197,9 +1222,9 @@ def save_names_subs(dump, file, na=None):
     file.close()
     
     if na is None:
-        print "Saved %d names." % len(dump.N2A)
+        print "%s: saved %d names." % (file.name, len(dump.N2A))
     else:
-        print "Saved %d names out of %d." % (len(na), len(dump.N2A))
+        print "%s: saved %d names out of %d." % (file.name, len(na), len(dump.N2A))
     
 
 def is_idc(file):
