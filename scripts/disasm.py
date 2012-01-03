@@ -56,12 +56,12 @@ class Dump(Bunch):
         STRINGS = {}
         ROM = self.ROM
         for addr in sorted(ROM.keys()):
-            for i in range(4):
-                if addr+i not in STRMASK:
-                    s = GuessString(self, addr+i)
+            #~ for i in range(4):
+                #~ if addr+i not in STRMASK:
+                    s = GuessString(self, addr)
                     if s:
-                        STRINGS[addr+i] = s
-                        for k in range(len(s)+1): STRMASK[addr+i+k] = True
+                        STRINGS[addr] = s
+                        for k in range(len(s)+1): STRMASK[addr+k] = True
         self.STRMASK = STRMASK
         return STRINGS
     def _get_strings(self): 
