@@ -56,12 +56,12 @@ class Dump(Bunch):
         STRINGS = {}
         ROM = self.ROM
         for addr in sorted(ROM.keys()):
-            #~ for i in range(4):
-                #~ if addr+i not in STRMASK:
-                    s = GuessString(self, addr)
+            for i in range(1):
+                if addr+i not in STRMASK:
+                    s = GuessString(self, addr+i)
                     if s:
-                        STRINGS[addr] = s
-                        for k in range(len(s)+1): STRMASK[addr+k] = True
+                        STRINGS[addr+i] = s
+                        for k in range(len(s)+1): STRMASK[addr+i+k] = True
         self.STRMASK = STRMASK
         return STRINGS
     def _get_strings(self): 
@@ -375,6 +375,7 @@ def disasm_work(bin, addr):
     dasm = p.communicate()[0]
     os.remove(tmp)
     print "ok"
+    dasm = dasm.replace("\r", "")
     return dasm
 
 def disasm_dump(bin, addr):
