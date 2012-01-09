@@ -110,7 +110,7 @@ class Dump(Bunch):
                         tryMakeSub(dump,a)
         elif file.lower().endswith(".idc"):
             a2n,n2a,fe = idc.parse(file)
-            D[b].idc = file
+            dump.idc = file
         else:
             raise Exception, "Unrecognized extension: " + file
         
